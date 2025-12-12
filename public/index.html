@@ -13,10 +13,15 @@
     <header>
         <div class="nav-container">
             <a href="#" class="logo">🌿 FreshVeg</a>
-            <button class="cart-btn" id="cartToggle">
-                <span>🛒 購物車</span>
-                <span id="cartCount">0</span>
-            </button>
+            <div style="display: flex; gap: 1rem;">
+                <button class="cart-btn" id="ordersToggle" style="background: var(--text-light);">
+                    <span>📋 訂單列表</span>
+                </button>
+                <button class="cart-btn" id="cartToggle">
+                    <span>🛒 購物車</span>
+                    <span id="cartCount">0</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -36,6 +41,20 @@
             </div>
         </div>
     </main>
+
+    <!-- Orders List Modal -->
+    <div class="modal-overlay" id="ordersModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>今日訂單列表</h3>
+                <button class="close-btn" id="closeOrdersModal">&times;</button>
+            </div>
+
+            <div id="ordersList" style="max-height: 60vh; overflow-y: auto;">
+                <p style="text-align: center; color: #888;">載入中...</p>
+            </div>
+        </div>
+    </div>
 
     <!-- Cart Modal -->
     <div class="modal-overlay" id="cartModal">
@@ -59,10 +78,7 @@
                     <label class="form-label" for="name">姓名</label>
                     <input type="text" id="name" class="form-input" required placeholder="請輸入您的大名">
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="phone">電話</label>
-                    <input type="tel" id="phone" class="form-input" required placeholder="09xx-xxx-xxx">
-                </div>
+                <!-- Phone input removed -->
                 <button type="submit" class="checkout-btn" disabled id="checkoutBtn">立即下單</button>
             </form>
         </div>
@@ -73,7 +89,7 @@
         <span id="toastMessage">操作成功</span>
     </div>
 
-    <script src="script.js?v=2"></script>
+    <script src="script.js?v=3"></script>
 </body>
 
 </html>

@@ -17,6 +17,12 @@ const checkoutBtn = document.getElementById('checkoutBtn');
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toastMessage');
 
+// Orders Modal Elements
+const ordersToggle = document.getElementById('ordersToggle');
+const ordersModal = document.getElementById('ordersModal');
+const closeOrdersModal = document.getElementById('closeOrdersModal');
+const ordersList = document.getElementById('ordersList');
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     fetchInventory();
@@ -34,12 +40,68 @@ function setupEventListeners() {
     });
 
     cartModal.addEventListener('click', (e) => {
-        if (e.target === cartModal) {
+        if (e.target === cartModal || e.target.classList.contains('close-btn')) {
             cartModal.classList.remove('active');
         }
     });
 
+    // Order Modal Listeners
+    ordersToggle.addEventListener('click', () => {
+        fetchOrders();
+        ordersModal.classList.add('active');
+    });
+
+    closeOrdersModal.addEventListener('click', () => {
+        ordersModal.classList.remove('active');
+    });
+
+    ordersModal.addEventListener('click', (e) => {
+        if (e.target === ordersModal) {
+            ordersModal.classList.remove('active');
+        }
+    });
+
     orderForm.addEventListener('submit', handleOrderSubmit);
+}
+
+// Fetch Orders
+async function fetchOrders() {
+    ordersList.innerHTML = '<p style="text-align: center; color: #888; padding: 1rem;">載入中...</p>';
+    try {
+        const response = await fetch(`${API_BASE}/orders`);
+        const orders = await response.json();
+        renderOrders(orders);
+    } catch (error) {
+        console.error('Failed to fetch orders:', error);
+        ordersList.innerHTML = '<p style="text-align: center; color: red;">無法載入訂單列表</p>';
+    }
+}
+
+function renderOrders(orders) {
+    if (orders.length === 0) {
+        ordersList.innerHTML = '<p style="text-align: center; color: #888; padding: 1rem;">目前沒有訂單</p>';
+        return;
+    }
+
+    ordersList.innerHTML = orders.map(order => {
+        const itemStr = order.items.map(i => `${i.name} x${i.qty}`).join(', ');
+        const date = new Date(order.timestamp).toLocaleString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+
+        return `
+            <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 0.8rem; border: 1px solid #eee;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-weight: bold;">
+                    <span>${order.customerName}</span>
+                    <span style="color: #666; font-size: 0.9rem;">${date}</span>
+                </div>
+                <div style="color: #4b5563; font-size: 0.95rem; margin-bottom: 0.5rem;">
+                    ${itemStr}
+                </div>
+                <div style="text-align: right; border-top: 1px dashed #ddd; padding-top: 0.5rem; color: #10b981; font-weight: bold;">
+                    總計: $${order.total}
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 // Fetch Data
@@ -74,10 +136,16 @@ function renderProducts(products) {
         card.className = 'product-card';
         if (isOutOfStock) card.classList.add('out-of-stock');
 
+        // Discount Badge
+        const discountBadge = product.discount
+            ? '<div style="position: absolute; top: 10px; right: 10px; background: #FFD700; color: #b45309; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">3件$100</div>'
+            : '';
+
         card.innerHTML = `
             <div style="position: relative;">
                 <img src="${product.image}" alt="${product.name}" class="product-image" style="${isOutOfStock ? 'filter: grayscale(100%); opacity: 0.8;' : ''}">
                 ${isOutOfStock ? '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: white; padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold;">補貨中</div>' : ''}
+                ${discountBadge}
             </div>
             <div class="product-info">
                 <h3 class="product-name">${product.name}</h3>
@@ -126,31 +194,62 @@ function updateCartCounts() {
 
 function updateCartUI() {
     cartItems.innerHTML = '';
-    let total = 0;
+
+    // 1. Separate items
+    let normalItems = [];
+    let discountItems = [];
 
     if (cart.length === 0) {
         cartItems.innerHTML = '<p style="text-align: center; color: #888;">購物車是空的</p>';
-    } else {
-        cart.forEach((item, index) => {
-            const itemTotal = item.price * item.quantity;
-            total += itemTotal;
-
-            const div = document.createElement('div');
-            div.className = 'cart-item';
-            div.innerHTML = `
-                <div class="cart-item-info">
-                    <h4>${item.name}</h4>
-                    <span style="color: #666; font-size: 0.9rem;">$${item.price} x ${item.quantity}</span>
-                </div>
-                <div class="cart-item-controls">
-                    <button class="qty-btn" onclick="updateQuantity(${index}, -1)">-</button>
-                    <span>${item.quantity}</span>
-                    <button class="qty-btn" onclick="updateQuantity(${index}, 1)">+</button>
-                </div>
-            `;
-            cartItems.appendChild(div);
-        });
+        cartTotal.textContent = '0';
+        return;
     }
+
+    cart.forEach((item, index) => {
+        // Render Item Row
+        const div = document.createElement('div');
+        div.className = 'cart-item';
+        div.innerHTML = `
+            <div class="cart-item-info">
+                <h4>${item.name} ${item.discount ? '<span style="font-size:0.75rem; background:#FFD700; color:#b45309; padding:2px 4px; border-radius:3px;">3件100</span>' : ''}</h4>
+                <span style="color: #666; font-size: 0.9rem;">$${item.price} x ${item.quantity}</span>
+            </div>
+            <div class="cart-item-controls">
+                <button class="qty-btn" onclick="updateQuantity(${index}, -1)">-</button>
+                <span>${item.quantity}</span>
+                <button class="qty-btn" onclick="updateQuantity(${index}, 1)">+</button>
+            </div>
+        `;
+        cartItems.appendChild(div);
+
+        // Group for calculation
+        if (item.discount) {
+            // Expand quantity: [Price, Price, Price]
+            for (let i = 0; i < item.quantity; i++) {
+                discountItems.push(parseInt(item.price));
+            }
+        } else {
+            normalItems.push(parseInt(item.price) * item.quantity);
+        }
+    });
+
+    // 2. Calculate Total
+    let total = 0;
+
+    // A. Normal Items
+    total += normalItems.reduce((sum, p) => sum + p, 0);
+
+    // B. Discount Items (3 for 100)
+    // Sort descending to prioritize expensive items in the bundle (so customer saves more / remainder is cheapest)
+    discountItems.sort((a, b) => b - a);
+
+    let bundleCount = Math.floor(discountItems.length / 3);
+
+    total += bundleCount * 100;
+
+    // Add remainders (the cheapest ones because we sorted descending)
+    const remainders = discountItems.slice(bundleCount * 3);
+    total += remainders.reduce((sum, p) => sum + p, 0);
 
     cartTotal.textContent = total;
 }
@@ -174,6 +273,7 @@ window.updateQuantity = (index, change) => {
     updateCartCounts();
     updateCartUI();
     renderProducts(inventory); // Re-render to update stock display
+    showToast(`已加入 ${product.name}`);
 };
 
 // Order Submission
@@ -183,12 +283,12 @@ async function handleOrderSubmit(e) {
     if (cart.length === 0) return;
 
     const name = document.getElementById('name').value;
-    const phone = document.getElementById('phone').value;
+    // Phone removed
     const total = cartTotal.textContent;
 
     const orderData = {
         customerName: name,
-        customerPhone: phone,
+        // customerPhone removed
         items: cart.map(item => ({ name: item.name, qty: item.quantity, price: item.price })),
         total: total
     };

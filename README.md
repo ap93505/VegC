@@ -1,60 +1,94 @@
-# 🌿 FreshVeg - Vegetable Ordering App
+# 🌿 FreshVeg - Real-time Vegetable Ordering System
 
-A modern, premium vegetable ordering application integrated with Google Sheets for inventory and order management.
+A premium, full-stack vegetable ordering application built with **Node.js**, **Express**, and **Google Sheets** as the database. It features real-time stock management, discount logic ("3 items for $100"), and a live order monitoring system.
 
-## Features
-- **Modern UI**: Responsive, aesthetic design with green/nature theme.
-- **Dynamic Inventory**: Fetches products directly from a Google Sheet (Sheet 1).
-- **Order Management**: Submits orders to a second Google Sheet (Sheet 2).
-- **Cart System**: Fully functional shopping cart with total calculation.
-- **Mock Mode**: Works with mock data if no Google credentials are provided (for testing).
+## ✨ Features
 
-## Setup Guide
+- **Storefront**
+  - 🎨 **Premium UI**: Modern, responsive design with smooth animations.
+  - 🛍️ **Shopping Cart**: Add items, adjust quantities, and view live totals.
+  - ⚡ **Real-time Stock**: Displays remaining stock (Initial Stock - Orders - Cart).
+  - 🚫 **Stock Protection**: Prevents adding more items than available.
+  - 🏷️ **Discount Logic**: **"3 for $100"** special offer.
+    - Automatically identifies eligible items.
+    - Mix & match supported.
+    - Smart calculation: Bundles the 3 most expensive items into the discount; remaining items are charged at original price.
+  - 📋 **Order List**: View today's orders in real-time to avoid duplicate purchases.
+
+- **Backend (Node.js + Google Sheets)**
+  - 🔄 **Google Sheets API**: Uses Google Sheets as a CMS and Database.
+  - 🛡️ **Stock Validation**: Double-checks stock on the server before accepting orders.
+  - 🖼️ **Image Parsing**: Supports direct URLs, Drive links, and `=IMAGE()` formulas.
+
+## 🚀 Setup Guide
 
 ### 1. Prerequisites
-- Node.js installed.
-- A Google Cloud Project.
+- Node.js installed (v14+).
+- A Google Cloud Project with **Google Sheets API** enabled.
 
-### 2. Installation
+### 2. Google Sheets Setup
+Create a new Google Sheet with two tabs:
+
+#### **Sheet 1: Inventory (Header Row Required)**
+| Name | Price | Unit | Stock | Discount | Image |
+|------|-------|------|-------|----------|-------|
+| Carrots | 50 | kg | 20 | TRUE | http://... |
+| Spinach | 30 | kg | 15 | TRUE | http://... |
+
+- **Discount**: Set to `TRUE` to enable the "3 for $100" offer for that item.
+- **Image**: Can be a direct link, a Google Drive share link, or `=IMAGE("url")`.
+
+#### **Sheet 2: Orders (Header Row Required)**
+| Timestamp | CustomerName | Items | Total |
+|-----------|--------------|-------|-------|
+| (Auto) | (User Input) | (JSON) | (Auto) |
+
+**Important**: Share your Google Sheet with the **Service Account Email** (created in step 3) giving it **Editor** access.
+
+### 3. Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/ap93505/VegC.git
+   cd VegC
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Configure Environment Variables:
+   Create a `.env` file in the root directory:
+   ```env
+   PORT=3000
+   GOOGLE_SHEET_ID=your_sheet_id_here
+   GOOGLE_SERVICE_ACCOUNT_EMAIL=your_service_account_email
+   GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour...\n-----END PRIVATE KEY-----\n"
+   ```
+   *Note: Wrap the private key in quotes and preserve `\n` characters.*
+
+### 4. Run the Server
+
+**Development Mode** (Auto-restart on change):
 ```bash
-npm install
+npm run dev
 ```
 
-### 3. Google Sheets Setup (Crucial!)
-To allow the app to read/write to your Google Sheet, you need a **Service Account**.
-
-1.  **Create a Google Sheet**:
-    -   Create a new Google Sheet.
-    -   **Sheet 1 (Inventory)**: Rename the first tab to `Inventory` (optional, but keep it as first tab).
-        -   Headers (Row 1): `Name`, `Price`, `Unit`, `Stock`, `Image`
-        -   Add some sample data.
-    -   **Sheet 2 (Orders)**: Rename the second tab to `Orders`.
-        -   Headers (Row 1): `Timestamp`, `CustomerName`, `CustomerPhone`, `Items`, `Total`
-2.  **Google Cloud Console**:
-    -   Go to [Google Cloud Console](https://console.cloud.google.com/).
-    -   Create a new project.
-    -   Enable the **Google Sheets API**.
-    -   Go to **IAM & Admin** > **Service Accounts**.
-    -   Create a Service Account and download the **JSON Key** file.
-    -   **Share the Sheet**: Open your Google Sheet, click "Share", and paste the `client_email` from your JSON key (e.g., `vegc-app@...iam.gserviceaccount.com`). Give it **Editor** access.
-
-### 4. Configuration
-1.  Rename `.env.example` to `.env`.
-2.  Fill in the details:
-    -   `GOOGLE_SERVICE_ACCOUNT_EMAIL`: From your JSON key.
-    -   `GOOGLE_PRIVATE_KEY`: From your JSON key (copy the whole string including `-----BEGIN...`).
-    -   `GOOGLE_SHEET_ID`: The long string in your Google Sheet URL (e.g., `https://docs.google.com/spreadsheets/d/YOUR_ID_IS_HERE/edit`).
-
-### 5. Run
+**Production Start**:
 ```bash
-# Development (auto-reload)
-npm run dev
-
-# Production
 npm start
 ```
 
-Visit `http://localhost:3000` to view the app.
+Visit `http://localhost:3000` to start ordering!
 
-## Mock Mode
-If you run the app without valid `.env` credentials, it will default to **Mock Data** mode. You will see sample products, and orders will be logged to the server console instead of the Google Sheet.
+## 🧪 Mock Mode
+If no Google credentials are provided, the app will automatically fall back to **Mock Mode**, serving sample data so you can test the UI and Logic without a real spreadsheet.
+
+## 🛠️ Tech Stack
+- **Frontend**: HTML5, CSS3 (Variables, Flex/Grid), Vanilla JavaScript.
+- **Backend**: Node.js, Express.
+- **Database**: Google Sheets (via `google-spreadsheet`).
+
+## 📝 License
+ISC
