@@ -119,15 +119,29 @@ async function fetchInventory() {
 // Render Products
 function renderProducts(products) {
     productGrid.innerHTML = '';
-    products.forEach((product, index) => {
-        const initialStock = parseInt(product.stock) || 0;
 
-        // Calculate effective stock (Initial - In Cart)
+    // Calculate status and sort: Available first, Out of Stock last
+    const sortedProducts = products.map((product, index) => {
+        const initialStock = parseInt(product.stock) || 0;
         const cartItem = cart.find(item => item.name === product.name);
         const inCartQty = cartItem ? cartItem.quantity : 0;
         const remainingStock = initialStock - inCartQty;
-
         const isOutOfStock = remainingStock <= 0;
+
+        return {
+            ...product,
+            originalIndex: index, // Keep track of original index for addToCart
+            remainingStock,
+            isOutOfStock
+        };
+    }).sort((a, b) => {
+        if (a.isOutOfStock === b.isOutOfStock) return 0;
+        return a.isOutOfStock ? 1 : -1;
+    });
+
+    sortedProducts.forEach((product) => {
+        const { originalIndex, remainingStock, isOutOfStock } = product;
+
         const stockDisplay = isOutOfStock
             ? '<span style="color: #e63946; font-weight: bold;">已售完</span>'
             : `剩餘: ${remainingStock} ${product.unit}`;
@@ -151,7 +165,7 @@ function renderProducts(products) {
                 <h3 class="product-name">${product.name}</h3>
                 <p class="product-price">$${product.price} / ${product.unit}</p>
                 <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.8rem;">${stockDisplay}</div>
-                <button class="add-btn" onclick="addToCart(${index})" ${isOutOfStock ? 'disabled style="background: #ccc; border-color: #ccc; color: #666; cursor: not-allowed;"' : ''}>
+                <button class="add-btn" onclick="addToCart(${originalIndex})" ${isOutOfStock ? 'disabled style="background: #ccc; border-color: #ccc; color: #666; cursor: not-allowed;"' : ''}>
                     ${isOutOfStock ? '無法購買' : '加入購物車'}
                 </button>
             </div>
