@@ -45,6 +45,16 @@ Create a new Google Sheet with two tabs:
 
 **Important**: Share your Google Sheet with the **Service Account Email** (created in step 3) giving it **Editor** access.
 
+#### **Sheet 3: Order Statistics (Header Row Required)**
+| Name | Stock | SoldQuantity | RemainingStock | BuyersList |
+|------|-------|--------------|----------------|------------|
+| Carrots | 20 | (Auto) | (Auto) | (Auto) |
+| Spinach | 15 | (Auto) | (Auto) | (Auto) |
+
+- **Name**: Must match the product names in Sheet 1.
+- **Stock**: Initial stock (manually synced or referenced from Sheet 1).
+- **SoldQuantity, RemainingStock, BuyersList**: Automatically updated by the app.
+
 ### 3. Installation
 
 1. Clone the repository:
@@ -65,8 +75,14 @@ Create a new Google Sheet with two tabs:
    GOOGLE_SHEET_ID=your_sheet_id_here
    GOOGLE_SERVICE_ACCOUNT_EMAIL=your_service_account_email
    GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour...\n-----END PRIVATE KEY-----\n"
+   ADMIN_PASSWORD=your_secure_password
    ```
    *Note: Wrap the private key in quotes and preserve `\n` characters.*
+
+### 4. Admin Panel
+- Access the settings page at `http://localhost:3000/settings.html`.
+- Use the **ADMIN_PASSWORD** set in your `.env` file to log in.
+- Click **"整理訂單"** to manually update the Order Statistics sheet.
 
 ### 4. Run the Server
 

@@ -369,3 +369,20 @@ header {
   .hero h1 { font-size: 2rem; }
   .products-grid { grid-template-columns: 1fr; }
 }
+
+.settings-link {
+  position: fixed;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.8rem;
+  color: #ccc;
+  text-decoration: none;
+  opacity: 0.4;
+  transition: opacity 0.3s;
+  z-index: 99;
+}
+
+.settings-link:hover {
+  opacity: 1;
+  color: #888;
+}

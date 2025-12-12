@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreshVeg - Admin Settings</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .admin-container {
+            max-width: 600px;
+            margin: 4rem auto;
+            padding: 2rem;
+        }
+
+        .admin-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            text-align: center;
+        }
+
+        .btn-large {
+            font-size: 1.2rem;
+            padding: 1rem 2rem;
+            margin-top: 1rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .back-link {
+            display: block;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="nav-container">
+            <a href="/" class="logo">🌿 FreshVeg Admin</a>
+            <a href="/" class="cart-btn"
+                style="background: white; color: var(--primary); border: 1px solid var(--primary);">返回商店</a>
+        </div>
+    </header>
+
+    <div class="admin-container">
+        <!-- Login Section -->
+        <div id="login-section" class="admin-card">
+            <h2 class="section-title" style="margin-bottom: 1.5rem;">管理員登入</h2>
+            <div class="form-group">
+                <label class="form-label" style="text-align: left;">管理員密碼 Password</label>
+                <input type="password" id="admin-password" class="form-input" placeholder="請輸入密碼...">
+            </div>
+            <button id="login-btn" class="checkout-btn">登入 Login</button>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div id="dashboard-section" class="admin-card hidden">
+            <h2 class="section-title">管理面板</h2>
+            <p style="margin-bottom: 2rem; color: var(--text-light);">歡迎回來，管理員。</p>
+
+            <button id="sync-btn" class="checkout-btn btn-large">
+                📊 整理訂單 (Sync Stats)
+            </button>
+            <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-light);">
+                點擊此按鈕將計算所有訂單並更新統計表。
+            </p>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast">
+        <span id="toast-icon">✅</span>
+        <span id="toast-message">Operation successful</span>
+    </div>
+
+    <script>
+        const loginSection = document.getElementById('login-section');
+        const dashboardSection = document.getElementById('dashboard-section');
+        const passwordInput = document.getElementById('admin-password');
+        const loginBtn = document.getElementById('login-btn');
+        const syncBtn = document.getElementById('sync-btn');
+        const toast = document.getElementById('toast');
+        let currentPassword = '';
+
+        // Show Toast
+        function showToast(message, type = 'success') {
+            const icon = type === 'success' ? '✅' : '❌';
+            document.getElementById('toast-icon').innerText = icon;
+            document.getElementById('toast-message').innerText = message;
+            toast.className = `toast visible ${type}`;
+            setTimeout(() => toast.classList.remove('visible'), 3000);
+        }
+
+        // Login Logic
+        loginBtn.addEventListener('click', async () => {
+            const password = passwordInput.value.trim();
+            if (!password) {
+                showToast('請輸入密碼', 'error');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.innerText = '驗證中 Verifying...';
+
+            try {
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentPassword = password;
+                    loginSection.classList.add('hidden');
+                    dashboardSection.classList.remove('hidden');
+                    showToast('已登入 Login Successful');
+                } else {
+                    showToast(data.message || 'Login Failed', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showToast('連線錯誤 Connection Error', 'error');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerText = '登入 Login';
+            }
+        });
+
+        // Sync Logic
+        syncBtn.addEventListener('click', async () => {
+            syncBtn.disabled = true;
+            syncBtn.innerText = '⏳ 處理中...';
+
+            try {
+                const response = await fetch('/api/admin/sync-stats', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: currentPassword })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast('訂單整理完成');
+                } else {
+                    showToast(data.message || 'Error', 'error');
+                    // If auth failed, go back to login
+                    if (response.status === 401) {
+                        loginSection.classList.remove('hidden');
+                        dashboardSection.classList.add('hidden');
+                        passwordInput.value = '';
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('連線錯誤', 'error');
+            } finally {
+                syncBtn.disabled = false;
+                syncBtn.innerText = '📊 整理訂單 (Sync Stats)';
+            }
+        });
+    </script>
+</body>
+
+</html>

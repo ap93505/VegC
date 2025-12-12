@@ -37,15 +37,89 @@ async function getDoc() {
     return doc;
 }
 
+// Helper: Update Statistics Sheet (Sheet 3)
+async function updateStats(doc) {
+    try {
+        const statsSheet = doc.sheetsByIndex[2];
+        const orderSheet = doc.sheetsByIndex[1];
+
+        if (!statsSheet) {
+            console.warn('Statistics sheet not found');
+            return;
+        }
+
+        const [statsRows, orderRows] = await Promise.all([
+            statsSheet.getRows(),
+            orderSheet.getRows()
+        ]);
+
+        // Aggregate Sales Data
+        const productStats = {}; // { Name: { sold: 0, buyers: { user: qty } } }
+
+        orderRows.forEach(row => {
+            try {
+                const items = JSON.parse(row.get('Items'));
+                const customer = row.get('CustomerName');
+
+                if (Array.isArray(items)) {
+                    items.forEach(item => {
+                        if (item.name && item.qty) {
+                            if (!productStats[item.name]) {
+                                productStats[item.name] = { sold: 0, buyers: {} };
+                            }
+                            const qty = parseInt(item.qty);
+                            productStats[item.name].sold += qty;
+
+                            if (customer) {
+                                if (!productStats[item.name].buyers[customer]) {
+                                    productStats[item.name].buyers[customer] = 0;
+                                }
+                                productStats[item.name].buyers[customer] += qty;
+                            }
+                        }
+                    });
+                }
+            } catch (e) { }
+        });
+
+        // Update Stats Sheet
+        // Assumes Headers: Name, Stock, SoldQuantity, RemainingStock, BuyersList
+        for (const row of statsRows) {
+            const name = row.get('Name');
+            const data = productStats[name] || { sold: 0, buyers: {} };
+
+            // Initial Stock from Column B (Stock)
+            // Note: Use row.get('Stock') to read manually synced value
+            const initialStock = parseInt(row.get('Stock')) || 0;
+            const remaining = Math.max(0, initialStock - data.sold);
+
+            // Format buyers list as "User*Qty, User*Qty"
+            const buyersList = Object.entries(data.buyers)
+                .map(([user, qty]) => `${user}*${qty}`)
+                .join(', ');
+
+            row.set('SoldQuantity', data.sold);
+            row.set('RemainingStock', remaining);
+            row.set('BuyersList', buyersList);
+
+            await row.save();
+        }
+    } catch (error) {
+        console.error('Error updating stats:', error);
+    }
+}
+
 // Helper: Calculate Real-time stock
 async function calculateInventory(doc) {
     const inventorySheet = doc.sheetsByIndex[0];
     const orderSheet = doc.sheetsByIndex[1];
 
+    // ... existing login ...
     const [inventoryRows, orderRows] = await Promise.all([
         inventorySheet.getRows(),
         orderSheet.getRows()
     ]);
+    // ... rest of function ...
 
     const soldTotals = {};
     orderRows.forEach(row => {
@@ -178,10 +252,51 @@ app.post('/api/order', async (req, res) => {
             Total: total
         });
 
+        // 3. Update Statistics Sheet (Async, don't block response too long or block?)
+        // Better to await to ensure consistency, though it might be slower.
+        // REMOVED AUTO-UPDATE AS PER FEATURE REQUEST
+        // await updateStats(doc); 
+
         res.json({ success: true, message: 'Order submitted successfully' });
     } catch (error) {
         console.error('Error submitting order:', error);
         res.status(500).json({ error: 'Failed to submit order' });
+    }
+});
+
+// API: Admin Login (Verify Password)
+app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body;
+    if (!process.env.ADMIN_PASSWORD) {
+        return res.status(500).json({ success: false, message: 'Server configuration error: ADMIN_PASSWORD not set.' });
+    }
+
+    if (password === process.env.ADMIN_PASSWORD) {
+        res.json({ success: true, message: 'Login successful' });
+    } else {
+        res.status(401).json({ success: false, message: 'Incorrect password' });
+    }
+});
+
+// API: Admin Sync Stats
+app.post('/api/admin/sync-stats', async (req, res) => {
+    try {
+        const { password } = req.body;
+        // Check password
+        if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
+            return res.status(401).json({ success: false, message: '密碼錯誤或未設定' });
+        }
+
+        const doc = await getDoc();
+        if (!doc) {
+            return res.json({ success: false, message: 'Database connection failed (Mock Mode)' });
+        }
+
+        await updateStats(doc);
+        res.json({ success: true, message: '訂單統計已更新完成' });
+    } catch (error) {
+        console.error('Error syncing stats:', error);
+        res.status(500).json({ success: false, message: '更新失敗: ' + error.message });
     }
 });
 
