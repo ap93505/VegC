@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreshVeg - 有機蔬菜訂購</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header>
+        <div class="nav-container">
+            <a href="#" class="logo">🌿 FreshVeg</a>
+            <button class="cart-btn" id="cartToggle">
+                <span>🛒 購物車</span>
+                <span id="cartCount">0</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="hero">
+        <div>
+            <h1>產地直送，新鮮到家</h1>
+            <p>我們與在地小農合作，為您提供最新鮮、最健康的有機蔬菜。</p>
+        </div>
+    </div>
+
+    <main class="container">
+        <h2 class="section-title">本日精選</h2>
+        <div id="productGrid" class="products-grid">
+            <!-- Products will be injected here JS -->
+            <div class="loading" style="grid-column: 1/-1; text-align: center; padding: 2rem;">
+                載入中...
+            </div>
+        </div>
+    </main>
+
+    <!-- Cart Modal -->
+    <div class="modal-overlay" id="cartModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>您的購物籃</h3>
+                <button class="close-btn" id="closeModal">&times;</button>
+            </div>
+
+            <div class="cart-items" id="cartItems">
+                <!-- Cart items injected here -->
+                <p style="text-align: center; color: #888;">購物車是空的</p>
+            </div>
+
+            <div class="cart-total">
+                總計: $<span id="cartTotal">0</span>
+            </div>
+
+            <form id="orderForm">
+                <div class="form-group">
+                    <label class="form-label" for="name">姓名</label>
+                    <input type="text" id="name" class="form-input" required placeholder="請輸入您的大名">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="phone">電話</label>
+                    <input type="tel" id="phone" class="form-input" required placeholder="09xx-xxx-xxx">
+                </div>
+                <button type="submit" class="checkout-btn" disabled id="checkoutBtn">立即下單</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <span id="toastMessage">操作成功</span>
+    </div>
+
+    <script src="script.js?v=2"></script>
+</body>
+
+</html>
