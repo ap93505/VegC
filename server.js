@@ -40,16 +40,18 @@ async function getDoc() {
 // Helper: Update Statistics Sheet (Sheet 3)
 async function updateStats(doc) {
     try {
-        const statsSheet = doc.sheetsByIndex[2];
+        const inventorySheet = doc.sheetsByIndex[0];
         const orderSheet = doc.sheetsByIndex[1];
+        const statsSheet = doc.sheetsByIndex[2];
 
         if (!statsSheet) {
             console.warn('Statistics sheet not found');
             return;
         }
 
-        const [statsRows, orderRows] = await Promise.all([
-            statsSheet.getRows(),
+        // Fetch all data
+        const [inventoryRows, orderRows] = await Promise.all([
+            inventorySheet.getRows(),
             orderSheet.getRows()
         ]);
 
@@ -82,30 +84,53 @@ async function updateStats(doc) {
             } catch (e) { }
         });
 
-        // Update Stats Sheet
-        // Assumes Headers: Name, Stock, SoldQuantity, RemainingStock, BuyersList
-        for (const row of statsRows) {
-            const name = row.get('Name');
-            const data = productStats[name] || { sold: 0, buyers: {} };
+        // Resize Stats Sheet to match Inventory count (+1 for header)
+        // Ensure we have enough rows for all products
+        const targetRowCount = inventoryRows.length + 1;
 
-            // Initial Stock from Column B (Stock)
-            // Note: Use row.get('Stock') to read manually synced value
-            const initialStock = parseInt(row.get('Stock')) || 0;
+        // Resize logic (try-catch in case of permissions or API limits, but usually fine)
+        try {
+            await statsSheet.resize({ rowCount: targetRowCount, colCount: 5 });
+        } catch (e) {
+            console.warn('Resize failed, attempting to proceed with existing cells', e);
+        }
+
+        // Load all cells for the new size
+        await statsSheet.loadCells();
+
+        // Overwrite Data
+        for (let i = 0; i < inventoryRows.length; i++) {
+            const invRow = inventoryRows[i];
+            const name = invRow.get('Name');
+            const stockStr = invRow.get('Stock');
+            const initialStock = parseInt(stockStr) || 0;
+
+            const data = productStats[name] || { sold: 0, buyers: {} };
             const remaining = Math.max(0, initialStock - data.sold);
 
-            // Format buyers list as "User*Qty, User*Qty"
+            // Format buyers list
             const buyersList = Object.entries(data.buyers)
                 .map(([user, qty]) => `${user}*${qty}`)
                 .join(', ');
 
-            row.set('SoldQuantity', data.sold);
-            row.set('RemainingStock', remaining);
-            row.set('BuyersList', buyersList);
+            // Indices: 0=Name, 1=Stock, 2=Sold, 3=Remaining, 4=Buyers
+            const rowIndex = i + 1; // Header is 0
 
-            await row.save();
+            statsSheet.getCell(rowIndex, 0).value = name;
+            statsSheet.getCell(rowIndex, 1).value = initialStock;
+            statsSheet.getCell(rowIndex, 2).value = data.sold;
+            statsSheet.getCell(rowIndex, 3).value = remaining;
+            statsSheet.getCell(rowIndex, 4).value = buyersList;
         }
+
+        // Clear any excess rows if resize didn't strictly truncate (though resize usually handles it)
+        // Check grid properties if needed, but resize is authoritative.
+
+        await statsSheet.saveUpdatedCells();
+
     } catch (error) {
         console.error('Error updating stats:', error);
+        throw error; // Re-throw to inform frontend
     }
 }
 
@@ -136,7 +161,10 @@ async function calculateInventory(doc) {
     });
 
     return inventoryRows.map(row => {
-        let imageUrl = row.get('Image') || '';
+        let imageUrl = row.get('Image');
+        if (!imageUrl || imageUrl.trim() === '') {
+            imageUrl = 'images/default.png';
+        }
         const name = row.get('Name');
         const totalStock = parseInt(row.get('Stock')) || 0;
         const soldQty = soldTotals[name] || 0;
