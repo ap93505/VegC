@@ -43,6 +43,90 @@
         .back-link:hover {
             text-decoration: underline;
         }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Toggle Switch */
+        .switch-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2rem;
+            padding: 2rem;
+            background: #ffffff;
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+        }
+
+        .switch-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+
+        .switch-label {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-right: 1rem;
+            color: var(--text-dark);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: #10b981;
+        }
+
+        input:focus+.slider {
+            box-shadow: 0 0 1px #10b981;
+        }
+
+        input:checked+.slider:before {
+            -webkit-transform: translateX(26px);
+            -ms-transform: translateX(26px);
+            transform: translateX(26px);
+        }
     </style>
 </head>
 
@@ -69,7 +153,19 @@
         <!-- Dashboard Section -->
         <div id="dashboard-section" class="admin-card hidden">
             <h2 class="section-title">管理面板</h2>
-            <p style="margin-bottom: 2rem; color: var(--text-light);">歡迎回來，管理員。</p>
+            <!-- Store Status Toggle -->
+            <div class="switch-container">
+                <div class="switch-row">
+                    <span class="switch-label">接受訂單 (Store Open)</span>
+                    <label class="switch">
+                        <input type="checkbox" id="store-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <p id="status-text" style="font-size: 0.95rem; font-weight: 500; margin: 0;">
+                    目前狀態: 開啟 (3天後自動重置)
+                </p>
+            </div>
 
             <button id="sync-btn" class="checkout-btn btn-large">
                 📊 整理訂單 (Sync Stats)
@@ -92,6 +188,8 @@
         const passwordInput = document.getElementById('admin-password');
         const loginBtn = document.getElementById('login-btn');
         const syncBtn = document.getElementById('sync-btn');
+        const storeToggle = document.getElementById('store-toggle');
+        const statusText = document.getElementById('status-text');
         const toast = document.getElementById('toast');
         let currentPassword = '';
 
@@ -128,6 +226,10 @@
                     currentPassword = password;
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
+
+                    // Fetch initial status
+                    await fetchStoreStatus();
+
                     showToast('已登入 Login Successful');
                 } else {
                     showToast(data.message || 'Login Failed', 'error');
@@ -172,6 +274,52 @@
             } finally {
                 syncBtn.disabled = false;
                 syncBtn.innerText = '📊 整理訂單 (Sync Stats)';
+            }
+        });
+        // Store Status Logic
+        async function fetchStoreStatus() {
+            try {
+                const res = await fetch('/api/store-status');
+                const data = await res.json();
+                updateToggleUI(data.isOpen);
+            } catch (error) {
+                console.error('Failed to fetch status');
+            }
+        }
+
+        function updateToggleUI(isOpen) {
+            storeToggle.checked = isOpen;
+            statusText.textContent = isOpen
+                ? '目前狀態: 開啟 (接單中)'
+                : '目前狀態: 關閉 (本周訂單已截止)';
+            statusText.style.color = isOpen ? '#10b981' : '#e63946';
+        }
+
+        storeToggle.addEventListener('change', async (e) => {
+            const isOpen = e.target.checked;
+
+            // Optimistic update
+            updateToggleUI(isOpen);
+
+            try {
+                const response = await fetch('/api/admin/store-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: currentPassword, isOpen })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message);
+                } else {
+                    showToast(data.message, 'error');
+                    // Revert if failed
+                    updateToggleUI(!isOpen);
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('連線錯誤', 'error');
+                updateToggleUI(!isOpen);
             }
         });
     </script>

@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -247,9 +249,90 @@ app.get('/api/orders', async (req, res) => {
     }
 });
 
-// API: Submit Order
+// Helper: Get and Auto-Reset Store Status
+const SETTINGS_FILE = path.join(__dirname, 'server_settings.json');
+
+function getStoreStatus() {
+    try {
+        if (!fs.existsSync(SETTINGS_FILE)) {
+            // Create default if not exists
+            const defaultSettings = { isOpen: true, closedAt: null };
+            fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings));
+            return defaultSettings;
+        }
+
+        const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+        let settings = JSON.parse(data);
+
+        // Check 3-day reset logic
+        if (!settings.isOpen && settings.closedAt) {
+            const closedTime = new Date(settings.closedAt).getTime();
+            const now = Date.now();
+            const daysDiff = (now - closedTime) / (1000 * 60 * 60 * 24);
+
+            if (daysDiff >= 3) {
+                console.log('Auto-opening store after 3 days');
+                settings.isOpen = true;
+                settings.closedAt = null;
+                fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
+            }
+        }
+
+        return settings;
+    } catch (error) {
+        console.error('Error reading settings:', error);
+        return { isOpen: true, closedAt: null };
+    }
+}
+
+function updateStoreStatus(isOpen) {
+    const settings = {
+        isOpen: isOpen,
+        closedAt: isOpen ? null : new Date().toISOString()
+    };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
+    return settings;
+}
+
+// API: Get Store Status
+app.get('/api/store-status', (req, res) => {
+    const status = getStoreStatus();
+    res.json(status);
+});
+
+// API: Check Name Existence
+app.get('/api/check-name', async (req, res) => {
+    try {
+        const nameToCheck = req.query.name;
+        if (!nameToCheck) return res.json({ exists: false });
+
+        const doc = await getDoc();
+        if (!doc) return res.json({ exists: false }); // Mock mode
+
+        const sheet = doc.sheetsByIndex[1];
+        const rows = await sheet.getRows();
+
+        const exists = rows.some(row => {
+            const rowName = row.get('CustomerName');
+            return rowName && rowName.trim().toLowerCase() === nameToCheck.trim().toLowerCase();
+        });
+
+        res.json({ exists });
+    } catch (error) {
+        console.error('Check name error:', error);
+        res.status(500).json({ error: 'Check failed' });
+    }
+});
+
+// API: Order Submission
 app.post('/api/order', async (req, res) => {
     try {
+        // 0. Check Store Status
+        const status = getStoreStatus();
+        if (!status.isOpen) {
+            return res.json({ success: false, message: '本周網頁訂單已截止，如需下單請聯繫 Eva' });
+        }
+
         const { customerName, items, total } = req.body;
         const doc = await getDoc();
 
@@ -326,6 +409,18 @@ app.post('/api/admin/sync-stats', async (req, res) => {
         console.error('Error syncing stats:', error);
         res.status(500).json({ success: false, message: '更新失敗: ' + error.message });
     }
+});
+
+// API: Admin Update Store Status
+app.post('/api/admin/store-status', (req, res) => {
+    const { password, isOpen } = req.body;
+
+    if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
+        return res.status(401).json({ success: false, message: '密碼錯誤' });
+    }
+
+    const newSettings = updateStoreStatus(isOpen);
+    res.json({ success: true, message: `商店已${isOpen ? '開啟' : '關閉'}`, status: newSettings });
 });
 
 app.listen(PORT, () => {

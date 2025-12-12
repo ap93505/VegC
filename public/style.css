@@ -35,7 +35,7 @@ header {
   position: sticky;
   top: 0;
   z-index: 100;
-  border-bottom: 1px solid rgba(0,0,0,0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .nav-container {
@@ -78,7 +78,7 @@ header {
 
 /* Hero */
 .hero {
-  background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url('https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80');
+  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url('https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80');
   background-size: cover;
   background-position: center;
   height: 400px;
@@ -96,7 +96,7 @@ header {
   font-size: 3rem;
   font-weight: 800;
   margin-bottom: 1rem;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .hero p {
@@ -195,7 +195,7 @@ header {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
   display: none;
   align-items: center;
   justify-content: center;
@@ -362,12 +362,22 @@ header {
   opacity: 1;
 }
 
-.toast.success { background: var(--primary); }
-.toast.error { background: #e63946; }
+.toast.success {
+  background: var(--primary);
+}
+
+.toast.error {
+  background: #e63946;
+}
 
 @media (max-width: 640px) {
-  .hero h1 { font-size: 2rem; }
-  .products-grid { grid-template-columns: 1fr; }
+  .hero h1 {
+    font-size: 2rem;
+  }
+
+  .products-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .settings-link {
@@ -385,4 +395,32 @@ header {
 .settings-link:hover {
   opacity: 1;
   color: #888;
+}
+
+/* Closed Modal Specifics */
+.closed-modal-content {
+  text-align: center;
+  padding: 1rem;
+}
+
+.closed-modal-content h3 {
+  color: #e63946;
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.closed-modal-content p {
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+  color: var(--text);
+}
+
+.closed-modal-content button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.8rem 2rem;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  cursor: pointer;
 }

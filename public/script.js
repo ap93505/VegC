@@ -23,6 +23,10 @@ const ordersModal = document.getElementById('ordersModal');
 const closeOrdersModal = document.getElementById('closeOrdersModal');
 const ordersList = document.getElementById('ordersList');
 
+// Closed Modal Elements
+const closedModal = document.getElementById('closedModal');
+const closeClosedModalBtn = document.getElementById('closeClosedModalBtn');
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     fetchInventory();
@@ -59,6 +63,10 @@ function setupEventListeners() {
         if (e.target === ordersModal) {
             ordersModal.classList.remove('active');
         }
+    });
+
+    closeClosedModalBtn.addEventListener('click', () => {
+        closedModal.classList.remove('active');
     });
 
     orderForm.addEventListener('submit', handleOrderSubmit);
@@ -135,8 +143,17 @@ function renderProducts(products) {
             isOutOfStock
         };
     }).sort((a, b) => {
-        if (a.isOutOfStock === b.isOutOfStock) return 0;
-        return a.isOutOfStock ? 1 : -1;
+        // Priority 1: Stock Status (Out of Stock goes to bottom)
+        if (a.isOutOfStock && !b.isOutOfStock) return 1;
+        if (!a.isOutOfStock && b.isOutOfStock) return -1;
+
+        // Priority 2: Discount (If both in stock, Discount goes to top)
+        if (!a.isOutOfStock && !b.isOutOfStock) {
+            if (b.discount && !a.discount) return 1;
+            if (a.discount && !b.discount) return -1;
+        }
+
+        return 0; // Keep original order otherwise
     });
 
     sortedProducts.forEach((product) => {
@@ -150,9 +167,11 @@ function renderProducts(products) {
         card.className = 'product-card';
         if (isOutOfStock) card.classList.add('out-of-stock');
 
-        // Discount Badge
-        const discountBadge = product.discount
-            ? '<div style="position: absolute; top: 10px; right: 10px; background: #FFD700; color: #b45309; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">3件$100</div>'
+        // Discount Badge - Removed per user request
+        const discountBadge = '';
+
+        const priceDiscountTag = product.discount
+            ? '<span style="background: #e63946; color: white; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;">3件$100</span>'
             : '';
 
         card.innerHTML = `
@@ -163,7 +182,7 @@ function renderProducts(products) {
             </div>
             <div class="product-info">
                 <h3 class="product-name">${product.name}</h3>
-                <p class="product-price">$${product.price} / ${product.unit}</p>
+                <p class="product-price">$${product.price} / ${product.unit} ${priceDiscountTag}</p>
                 <div style="font-size: 0.9rem; color: #666; margin-bottom: 0.8rem;">${stockDisplay}</div>
                 <button class="add-btn" onclick="addToCart(${originalIndex})" ${isOutOfStock ? 'disabled style="background: #ccc; border-color: #ccc; color: #666; cursor: not-allowed;"' : ''}>
                     ${isOutOfStock ? '無法購買' : '加入購物車'}
@@ -296,13 +315,41 @@ async function handleOrderSubmit(e) {
 
     if (cart.length === 0) return;
 
+    // Check Store Status First
+    try {
+        const res = await fetch(`${API_BASE}/store-status`);
+        const status = await res.json();
+
+        if (!status.isOpen) {
+            cartModal.classList.remove('active');
+            closedModal.classList.add('active');
+            return;
+        }
+    } catch (err) {
+        console.error('Status check failed');
+    }
+
     const name = document.getElementById('name').value;
-    // Phone removed
     const total = cartTotal.textContent;
+
+    // Check Duplicate Name
+    try {
+        const checkRes = await fetch(`${API_BASE}/check-name?name=${encodeURIComponent(name)}`);
+        const checkData = await checkRes.json();
+
+        if (checkData.exists) {
+            showToast('本周已有相同名字的訂單，請協助更換下單姓名，謝謝', 'error');
+            return;
+        }
+    } catch (error) {
+        console.error('Name check failed:', error);
+        // Optional: Block or allow? Let's allow if check fails to avoid blocking users on error? 
+        // Or fail safe? User asked for feature, so let's log but maybe proceed or alert. 
+        // For now, if check fails entirely (500), we probably shouldn't block, but if it returns true, we block.
+    }
 
     const orderData = {
         customerName: name,
-        // customerPhone removed
         items: cart.map(item => ({ name: item.name, qty: item.quantity, price: item.price })),
         total: total
     };
@@ -327,7 +374,6 @@ async function handleOrderSubmit(e) {
             showToast('訂單已送出！我們會盡快為您出貨', 'success');
         } else {
             showToast(result.message || '訂購失敗，請稍後再試', 'error');
-            // Refresh inventory to show latest stock if it was a stock issue
             await fetchInventory();
         }
     } catch (error) {

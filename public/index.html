@@ -33,7 +33,7 @@
     </div>
 
     <main class="container">
-        <h2 class="section-title">本日精選</h2>
+        <h2 class="section-title">本週精選</h2>
         <div id="productGrid" class="products-grid">
             <!-- Products will be injected here JS -->
             <div class="loading" style="grid-column: 1/-1; text-align: center; padding: 2rem;">
@@ -46,7 +46,7 @@
     <div class="modal-overlay" id="ordersModal">
         <div class="modal" style="max-width: 600px;">
             <div class="modal-header">
-                <h3>今日訂單列表</h3>
+                <h3>本週訂單列表</h3>
                 <button class="close-btn" id="closeOrdersModal">&times;</button>
             </div>
 
@@ -81,6 +81,17 @@
                 <!-- Phone input removed -->
                 <button type="submit" class="checkout-btn" disabled id="checkoutBtn">立即下單</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Order Closed Modal -->
+    <div class="modal-overlay" id="closedModal" style="z-index: 3000;">
+        <div class="modal" style="max-width: 400px;">
+            <div class="closed-modal-content">
+                <h3>🚫 本周網頁訂單已截止</h3>
+                <p>如需下單請聯繫 Eva</p>
+                <button id="closeClosedModalBtn">我了解了</button>
+            </div>
         </div>
     </div>
 
