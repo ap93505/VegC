@@ -72,12 +72,16 @@ function setupEventListeners() {
     orderForm.addEventListener('submit', handleOrderSubmit);
 }
 
+// Global orders state
+let userOrders = [];
+
 // Fetch Orders
 async function fetchOrders() {
     ordersList.innerHTML = '<p style="text-align: center; color: #888; padding: 1rem;">載入中...</p>';
     try {
         const response = await fetch(`${API_BASE}/orders`);
         const orders = await response.json();
+        userOrders = orders; // Store globally
         renderOrders(orders);
     } catch (error) {
         console.error('Failed to fetch orders:', error);
@@ -91,7 +95,7 @@ function renderOrders(orders) {
         return;
     }
 
-    ordersList.innerHTML = orders.map(order => {
+    ordersList.innerHTML = orders.map((order, idx) => {
         const itemStr = order.items.map(i => `${i.name} x${i.qty}`).join(', ');
         const date = new Date(order.timestamp).toLocaleString('zh-TW', { hour: '2-digit', minute: '2-digit' });
 
@@ -104,13 +108,127 @@ function renderOrders(orders) {
                 <div style="color: #4b5563; font-size: 0.95rem; margin-bottom: 0.5rem;">
                     ${itemStr}
                 </div>
-                <div style="text-align: right; border-top: 1px dashed #ddd; padding-top: 0.5rem; color: #10b981; font-weight: bold;">
-                    總計: $${order.total}
+                <div style="text-align: right; border-top: 1px dashed #ddd; padding-top: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <button class="btn-info" onclick="openUserDetails(${idx})">訂單明細</button>
+                    <span style="color: #10b981; font-weight: bold;">總計: $${order.total}</span>
                 </div>
             </div>
         `;
     }).join('');
 }
+
+// User Details Logic
+const userDetailsModal = document.getElementById('userDetailsModal');
+const userDetailsContent = document.getElementById('userDetailsContent');
+const closeUserDetailsModal = document.getElementById('closeUserDetailsModal');
+
+if (closeUserDetailsModal) {
+    closeUserDetailsModal.addEventListener('click', () => {
+        userDetailsModal.classList.remove('active');
+    });
+}
+
+window.openUserDetails = (idx) => {
+    const order = userOrders[idx];
+    userDetailsModal.classList.add('active');
+
+    // Logic similar to admin side
+    let normalItems = [];
+    let discountItems = [];
+    let total = 0;
+
+    order.items.forEach(item => {
+        // Find product in current inventory to check discount status
+        // Note: If product doesn't exist anymore, we might miss discount info.
+        // Improvement: Backend should ideally store price/discount snapshot.
+        // For now, using current inventory state as proxy.
+        const product = inventory.find(p => p.name === item.name);
+        // Fallback: Check if we can infer from stored implementation plan or just assume false
+        const isDiscount = product ? product.discount : false;
+        const price = parseInt(item.price);
+
+        for (let i = 0; i < item.qty; i++) {
+            if (isDiscount) discountItems.push({ name: item.name, price: price });
+            else normalItems.push({ name: item.name, price: price });
+        }
+    });
+
+    // Helper to group items
+    const groupItems = (items) => {
+        const grouped = {};
+        items.forEach(item => {
+            if (!grouped[item.name]) {
+                grouped[item.name] = { name: item.name, price: item.price, qty: 0, total: 0 };
+            }
+            grouped[item.name].qty++;
+            grouped[item.name].total += item.price;
+        });
+        return Object.values(grouped);
+    };
+
+    let html = '<div class="details-list">';
+
+    // 1. Discount Bundles
+    if (discountItems.length > 0) {
+        html += '<div class="detail-group-title">優惠組合 (3包100) Promo Items</div>';
+        discountItems.sort((a, b) => b.price - a.price);
+
+        const bundles = Math.floor(discountItems.length / 3);
+
+        for (let i = 0; i < bundles; i++) {
+            const group = discountItems.slice(i * 3, i * 3 + 3);
+            const names = group.map(x => x.name).join(' + ');
+            html += `
+                <div class="detail-row">
+                    <span style="font-size:0.9rem;">📦 組合 ${i + 1}: <br>${names}</span>
+                    <span>$100</span>
+                </div>
+            `;
+            total += 100;
+        }
+
+        const remainder = discountItems.slice(bundles * 3);
+        if (remainder.length > 0) {
+            html += '<div class="detail-group-title" style="font-size:0.9rem; color:#666;">優惠區單點</div>';
+            const groupedRemainder = groupItems(remainder);
+
+            groupedRemainder.forEach(item => {
+                html += `
+                    <div class="detail-row">
+                        <span>${item.name} <span style="font-size:0.85rem; color:#666;">($${item.price} x ${item.qty})</span></span>
+                        <span>$${item.total}</span>
+                    </div>
+                `;
+                total += item.total;
+            });
+        }
+    }
+
+    // 2. Normal Items
+    if (normalItems.length > 0) {
+        html += '<div class="detail-group-title">一般商品 Normal Items</div>';
+        const groupedNormal = groupItems(normalItems);
+
+        groupedNormal.forEach(item => {
+            html += `
+                <div class="detail-row">
+                    <span>${item.name} <span style="font-size:0.85rem; color:#666;">($${item.price} x ${item.qty})</span></span>
+                    <span>$${item.total}</span>
+                </div>
+            `;
+            total += item.total;
+        });
+    }
+
+    html += `
+        <div style="border-top: 2px solid #333; margin-top:1rem; padding-top:0.5rem; display:flex; justify-content:space-between; align-items:center;">
+            <strong>總計 Total</strong>
+            <strong style="color: #2563eb; font-size: 1.2rem;">$${total}</strong>
+        </div>
+    `;
+
+    userDetailsContent.innerHTML = html;
+};
 
 // Fetch Data
 async function fetchInventory() {

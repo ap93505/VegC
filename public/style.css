@@ -424,3 +424,51 @@ header {
   font-size: 1rem;
   cursor: pointer;
 }
+
+/* Order Details List Styles */
+.details-list {
+  text-align: left;
+  background: #f1f5f9;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-group-title {
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.btn-info {
+  background: transparent;
+  color: var(--text-light);
+  border: 1px solid #cbd5e1;
+  padding: 0.3rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-left: 0;
+  /* Align with left content */
+  transition: all 0.2s;
+}
+
+.btn-info:hover {
+  background: #f1f5f9;
+  border-color: var(--text-light);
+  color: var(--text);
+}

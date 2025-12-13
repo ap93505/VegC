@@ -127,6 +127,184 @@
             -ms-transform: translateX(26px);
             transform: translateX(26px);
         }
+
+        /* Order Management Styles */
+        .order-section {
+            margin-top: 2rem;
+            text-align: left;
+        }
+
+        .order-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            /* Ensure space between content and buttons */
+        }
+
+        .order-info {
+            flex: 1;
+            /* Allow text to take available space */
+            min-width: 0;
+            /* Fix for flex child overflow */
+            text-align: left;
+            /* Explicitly align left */
+        }
+
+        .order-info h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+            word-wrap: break-word;
+            /* Ensure long words break */
+        }
+
+        .order-info p {
+            margin: 0.2rem 0;
+            font-size: 0.9rem;
+            color: #64748b;
+            line-height: 1.4;
+            /* Improve readability for multi-line */
+        }
+
+        .order-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+            /* CRITICAL: Prevent buttons from being squashed */
+            align-self: flex-start;
+            /* Align buttons to top if card gets tall? Or center? User said "become higher". Center usually looks better unless very tall. Let's stick to center or auto (which is stretch). 'center' from parent align-items wins unless overridden here. */
+            align-self: center;
+            white-space: nowrap;
+            /* Prevent buttons wrapping */
+        }
+
+        .btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+            color: white;
+        }
+
+        .btn-edit {
+            background-color: #3b82f6;
+        }
+
+        .btn-edit:hover {
+            background-color: #2563eb;
+        }
+
+        .btn-delete {
+            background-color: #e63946;
+        }
+
+        .btn-delete:hover {
+            background-color: #dc2626;
+        }
+
+        .btn-add {
+            background-color: #10b981;
+            color: white;
+            padding: 0.8rem 1.5rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: block;
+            margin: 1rem auto;
+            width: 100%;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 1000;
+            /* Reset style.css conflicts */
+            max-height: none;
+            overflow-y: hidden;
+            border-radius: 0;
+        }
+
+        .modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .form-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px dashed #eee;
+        }
+
+        .qty-input {
+            width: 60px;
+            padding: 5px;
+            text-align: center;
+        }
+
+        .btn-info {
+            background-color: #64748b;
+        }
+
+        .btn-info:hover {
+            background-color: #475569;
+        }
+
+        .details-list {
+            text-align: left;
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.5rem;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-group-title {
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            color: #334155;
+        }
     </style>
 </head>
 
@@ -174,6 +352,57 @@
                 點擊此按鈕將計算所有訂單並更新統計表。
             </p>
         </div>
+
+        <!-- Order Management Section -->
+        <div id="order-management-section" class="admin-card hidden" style="margin-top: 2rem;">
+            <h2 class="section-title">訂單管理 Order Management</h2>
+
+            <button class="btn-add" onclick="openOrderModal()">+ 新增訂單 (Add New Order)</button>
+
+            <div id="admin-orders-list">
+                <p style="text-align: center; color: #888;">載入中 Loading...</p>
+            </div>
+        </div>
+
+        <!-- Edit/Add Order Modal -->
+        <div id="admin-order-modal" class="modal">
+            <div class="modal-content">
+                <h3 id="modal-title" style="margin-top:0;">新增訂單</h3>
+
+                <div class="form-group">
+                    <label>客戶姓名 Customer Name</label>
+                    <input type="text" id="edit-name" class="form-input" placeholder="Name">
+                </div>
+
+                <div class="form-group">
+                    <label>商品 Items <span style="color: #2563eb; font-weight: bold; margin-left: 0.5rem;">(總計: <span
+                                id="modal-total-price">$0</span>)</span></label>
+                    <div id="modal-items-list" style="margin-top: 0.5rem;">
+                        <!-- JS renders inputs here -->
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                    <button id="save-order-btn" class="checkout-btn">儲存 Save</button>
+                    <button class="checkout-btn" style="background: #94a3b8;" onclick="closeOrderModal()">取消
+                        Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Details Modal -->
+    <div id="order-details-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">訂單明細 Order Details</h3>
+            <div id="details-content">
+                <!-- JS renders details here -->
+            </div>
+            <div style="margin-top: 1.5rem; text-align: right;">
+                <button class="checkout-btn" onclick="closeDetailsModal()">關閉 Close</button>
+            </div>
+        </div>
+    </div>
     </div>
 
     <!-- Toast -->
@@ -226,6 +455,7 @@
                     currentPassword = password;
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
+                    document.getElementById('order-management-section').classList.remove('hidden');
 
                     // Fetch initial status
                     await fetchStoreStatus();
@@ -265,6 +495,7 @@
                     if (response.status === 401) {
                         loginSection.classList.remove('hidden');
                         dashboardSection.classList.add('hidden');
+                        document.getElementById('order-management-section').classList.add('hidden');
                         passwordInput.value = '';
                     }
                 }
@@ -276,12 +507,14 @@
                 syncBtn.innerText = '📊 整理訂單 (Sync Stats)';
             }
         });
+
         // Store Status Logic
         async function fetchStoreStatus() {
             try {
                 const res = await fetch('/api/store-status');
                 const data = await res.json();
                 updateToggleUI(data.isOpen);
+                if (currentPassword) fetchAdminOrders(); // Also fetch orders if logged in
             } catch (error) {
                 console.error('Failed to fetch status');
             }
@@ -322,6 +555,370 @@
                 updateToggleUI(!isOpen);
             }
         });
+
+        // --- Order Management Logic ---
+
+        let adminOrders = [];
+        let globalInventory = [];
+        let editingOrderIndex = null; // null = add mode, number = edit mode (rowIndex)
+        let editingOrderRealIndex = null; // The actual rowIndex from server
+
+        async function fetchAdminOrders() {
+            const listEl = document.getElementById('admin-orders-list');
+            try {
+                // Fetch Orders
+                const res = await fetch('/api/orders'); // Public API is fine, we just need the list
+                const orders = await res.json();
+                adminOrders = orders;
+
+                // Fetch Inventory for dropdowns
+                if (globalInventory.length === 0) {
+                    const invRes = await fetch('/api/inventory');
+                    globalInventory = await invRes.json();
+                }
+
+                renderAdminOrders();
+            } catch (e) {
+                console.error(e);
+                listEl.innerHTML = '<p style="color:red">無法取得訂單</p>';
+            }
+        }
+
+        function renderAdminOrders() {
+            const listEl = document.getElementById('admin-orders-list');
+            if (adminOrders.length === 0) {
+                listEl.innerHTML = '<p style="text-align: center; color: #888;">目前沒有訂單</p>';
+                return;
+            }
+
+            listEl.innerHTML = adminOrders.map((order, idx) => {
+                const itemStr = order.items.map(i => `${i.name} x${i.qty}`).join(', ');
+                return `
+                    <div class="order-card">
+                        <div class="order-info">
+                            <h4>${order.customerName} <span style="font-weight:normal; font-size:0.8rem; color:#888;">($${order.total})</span></h4>
+                            <p>${itemStr}</p>
+                            <p style="font-size:0.75rem; margin-top:0.2rem;">${new Date(order.timestamp).toLocaleString()}</p>
+                        </div>
+                        <div class="order-actions">
+                            <button class="btn-sm btn-info" onclick='showOrderDetails(${idx})'>明細</button>
+                            <button class="btn-sm btn-edit" onclick='openOrderModal(${idx})'>編輯</button>
+                            <button class="btn-sm btn-delete" onclick='deleteOrder(${order.rowIndex})'>刪除</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        const modal = document.getElementById('admin-order-modal');
+        const modalItemsList = document.getElementById('modal-items-list');
+        const modalTitle = document.getElementById('modal-title');
+        const nameInput = document.getElementById('edit-name');
+        const modalTotalPrice = document.getElementById('modal-total-price');
+
+        // Open Modal (Index is array index, if undefined -> Add New)
+        window.openOrderModal = (idx = null) => {
+            modal.classList.add('active');
+
+            // Render Items Interface
+            renderModalItems();
+
+            if (idx === null) {
+                // Add Mode
+                editingOrderIndex = null;
+                editingOrderRealIndex = null;
+                modalTitle.innerText = "新增訂單 Add Order";
+                nameInput.value = "";
+                // Reset quantities
+                document.querySelectorAll('.modal-qty').forEach(inp => inp.value = 0);
+            } else {
+                // Edit Mode
+                const order = adminOrders[idx];
+                editingOrderIndex = idx;
+                editingOrderRealIndex = order.rowIndex;
+                modalTitle.innerText = "編輯訂單 Edit Order";
+                nameInput.value = order.customerName;
+
+                // Fill quantities
+                order.items.forEach(item => {
+                    const input = document.querySelector(`.modal-qty[data-name="${item.name}"]`);
+                    if (input) input.value = item.qty;
+                });
+            }
+
+            // Disable OOS items if current qty is 0
+            document.querySelectorAll('.modal-qty').forEach(input => {
+                const stock = parseInt(input.getAttribute('data-stock')) || 0;
+                const qty = parseInt(input.value) || 0;
+
+                // If stock is 0 (or less) AND we don't have this item in current order, disable it.
+                // If we HAVE it (qty > 0), keep enabled so we can reduce/remove it.
+                // Note: user asked to "cannot modify number of add". 
+                // Technically if they have it, they could INCREASE it even if OOS globally (using held stock),
+                // but stock check on server helps there. 
+                // For UI, blocking add on 0-stock items is the main request.
+                if (stock <= 0 && qty === 0) {
+                    input.disabled = true;
+                    input.placeholder = "X";
+                } else {
+                    input.disabled = false;
+                }
+            });
+
+            calculateModalTotal();
+        };
+
+        window.closeOrderModal = () => {
+            modal.classList.remove('active');
+        };
+
+        function renderModalItems() {
+            modalItemsList.innerHTML = globalInventory.map(p => {
+                const discountBadge = p.discount
+                    ? `<span style="color: #64748b; font-size: 0.8rem; margin-left: 4px;">(3包100)</span>`
+                    : '';
+
+                return `
+                <div class="form-row">
+                    <span>
+                        ${p.name} ($${p.price}) ${discountBadge}
+                        <br><small style="color:${p.stock > 0 ? 'green' : 'red'}">剩: ${p.stock}</small>
+                    </span>
+                    <input type="number" min="0" value="0" class="qty-input modal-qty" data-name="${p.name}" data-price="${p.price}" data-stock="${p.stock}" onchange="calculateModalTotal()">
+                </div>
+            `}).join('');
+        }
+
+        window.calculateModalTotal = () => {
+            let total = 0;
+            // Separate items logic for 3 for 100
+            let normalItems = [];
+            let discountItems = [];
+
+            document.querySelectorAll('.modal-qty').forEach(input => {
+                const qty = parseInt(input.value) || 0;
+                const price = parseInt(input.getAttribute('data-price'));
+                const name = input.getAttribute('data-name');
+                const product = globalInventory.find(p => p.name === name);
+                const isDiscount = product ? product.discount : false;
+
+                if (qty > 0) {
+                    for (let i = 0; i < qty; i++) {
+                        if (isDiscount) discountItems.push(price);
+                        else normalItems.push(price);
+                    }
+                }
+            });
+
+            total += normalItems.reduce((a, b) => a + b, 0);
+
+            // Discount Logic
+            discountItems.sort((a, b) => b - a);
+            const bundles = Math.floor(discountItems.length / 3);
+            total += bundles * 100;
+            const remainder = discountItems.slice(bundles * 3);
+            total += remainder.reduce((a, b) => a + b, 0);
+
+            modalTotalPrice.innerText = `$${total}`;
+            return total;
+        };
+
+        document.getElementById('save-order-btn').addEventListener('click', async () => {
+            const customerName = nameInput.value.trim();
+            if (!customerName) return showToast('請輸入姓名', 'error');
+
+            const items = [];
+            document.querySelectorAll('.modal-qty').forEach(input => {
+                const qty = parseInt(input.value) || 0;
+                if (qty > 0) {
+                    items.push({
+                        name: input.getAttribute('data-name'),
+                        qty: qty,
+                        price: input.getAttribute('data-price')
+                    });
+                }
+            });
+
+            if (items.length === 0) return showToast('請選擇至少一樣商品', 'error');
+
+            const total = window.calculateModalTotal();
+
+            // Prepare API call
+            const endpoint = editingOrderRealIndex !== null
+                ? '/api/admin/order/update'
+                : '/api/admin/order/add';
+
+            const payload = {
+                password: currentPassword,
+                rowIndex: editingOrderRealIndex, // Ignored for add
+                newData: { // Wrapper for edit, or direct fields for add?
+                    // Server for 'Add' expects: customerName, items, total directly
+                    // Server for 'Update' expects: newData: { customerName, items, total }
+                    customerName, items, total
+                },
+                // For Add
+                customerName, items, total
+            };
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast(data.message);
+                    closeOrderModal();
+                    fetchAdminOrders();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('儲存失敗', 'error');
+            }
+        });
+
+        window.deleteOrder = async (rowIndex) => {
+            if (!confirm('確定要刪除此訂單嗎？刪除後庫存將會釋出。')) return;
+
+            try {
+                const res = await fetch('/api/admin/order/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: currentPassword, rowIndex })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('已刪除');
+                    fetchAdminOrders();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('刪除失敗', 'error');
+            }
+        };
+
+        // --- Order Details Logic ---
+        const detailsModal = document.getElementById('order-details-modal');
+        const detailsContent = document.getElementById('details-content');
+
+        window.showOrderDetails = (idx) => {
+            const order = adminOrders[idx];
+            detailsModal.classList.add('active');
+
+            // Re-calculate logic for display
+            let normalItems = []; // {name, price}
+            let discountItems = []; // {name, price}
+            let total = 0;
+
+            // Expand items based on Qty
+            order.items.forEach(item => {
+                const product = globalInventory.find(p => p.name === item.name);
+                const isDiscount = product ? product.discount : false;
+                const price = parseInt(item.price);
+
+                for (let i = 0; i < item.qty; i++) {
+                    if (isDiscount) discountItems.push({ name: item.name, price: price });
+                    else normalItems.push({ name: item.name, price: price });
+                }
+            });
+
+            // Helper to group items
+            const groupItems = (items) => {
+                const grouped = {};
+                items.forEach(item => {
+                    if (!grouped[item.name]) {
+                        grouped[item.name] = { name: item.name, price: item.price, qty: 0, total: 0 };
+                    }
+                    grouped[item.name].qty++;
+                    grouped[item.name].total += item.price;
+                });
+                return Object.values(grouped);
+            };
+
+            // Process Dimensions
+            let html = '<div class="details-list">';
+
+            // 1. Discount Bundles
+            if (discountItems.length > 0) {
+                html += '<div class="detail-group-title">優惠組合 (3包100) Promo Items</div>';
+                // Sort high to low
+                discountItems.sort((a, b) => b.price - a.price);
+
+                const bundles = Math.floor(discountItems.length / 3);
+
+                for (let i = 0; i < bundles; i++) {
+                    const group = discountItems.slice(i * 3, i * 3 + 3);
+                    const names = group.map(x => x.name).join(' + ');
+                    html += `
+                        <div class="detail-row">
+                            <span style="font-size:0.9rem;">📦 組合 ${i + 1}: ${names}</span>
+                            <span>$100</span>
+                        </div>
+                    `;
+                    total += 100;
+                }
+
+                // Remainder
+                const remainder = discountItems.slice(bundles * 3);
+                if (remainder.length > 0) {
+                    html += '<div class="detail-group-title" style="font-size:0.9rem; color:#666;">優惠區單點 (未滿3包) Remainder</div>';
+                    const groupedRemainder = groupItems(remainder);
+
+                    groupedRemainder.forEach(item => {
+                        html += `
+                            <div class="detail-row">
+                                <span>${item.name} <span style="font-size:0.85rem; color:#666;">($${item.price} x ${item.qty})</span></span>
+                                <span>$${item.total}</span>
+                            </div>
+                        `;
+                        total += item.total;
+                    });
+                }
+            }
+
+            // 2. Normal Items
+            if (normalItems.length > 0) {
+                html += '<div class="detail-group-title">一般商品 Normal Items</div>';
+                const groupedNormal = groupItems(normalItems);
+
+                groupedNormal.forEach(item => {
+                    html += `
+                        <div class="detail-row">
+                            <span>${item.name} <span style="font-size:0.85rem; color:#666;">($${item.price} x ${item.qty})</span></span>
+                            <span>$${item.total}</span>
+                        </div>
+                    `;
+                    total += item.total;
+                });
+            }
+
+            // Total
+            html += `
+                <div style="border-top: 2px solid #333; margin-top:1rem; padding-top:0.5rem; display:flex; justify-content:space-between; align-items:center;">
+                    <strong>總計 Total</strong>
+                    <strong style="color: #2563eb; font-size: 1.2rem;">$${total}</strong>
+                </div>
+            `;
+
+            // Show comparison if calculation differs from saved total (just in case)
+            if (total !== parseInt(order.total)) {
+                html += `<p style="color:red; font-size:0.8rem; text-align:right;">*注意: 系統計算($${total}) 與 訂單紀錄($${order.total}) 不符，可能因商品價格或優惠規則變動。</p>`;
+            }
+
+            html += '</div>';
+            detailsContent.innerHTML = html;
+        };
+
+        window.closeDetailsModal = () => {
+            detailsModal.classList.remove('active');
+        };
+
     </script>
 </body>
 

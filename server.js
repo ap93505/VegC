@@ -220,21 +220,22 @@ app.get('/api/orders', async (req, res) => {
         if (!doc) {
             // Mock Orders
             return res.json([
-                { timestamp: new Date().toISOString(), customerName: 'Mock User 1', items: [{ name: 'Carrots', qty: 2 }], total: 100 },
-                { timestamp: new Date().toISOString(), customerName: 'Mock User 2', items: [{ name: 'Tomatoes', qty: 1 }], total: 60 }
+                { rowIndex: 1, timestamp: new Date().toISOString(), customerName: 'Mock User 1', items: [{ name: 'Carrots', qty: 2 }], total: 100 },
+                { rowIndex: 2, timestamp: new Date().toISOString(), customerName: 'Mock User 2', items: [{ name: 'Tomatoes', qty: 1 }], total: 60 }
             ]);
         }
 
         const sheet = doc.sheetsByIndex[1];
         const rows = await sheet.getRows();
 
-        const orders = rows.map(row => {
+        const orders = rows.map((row, index) => {
             let items = [];
             try {
                 items = JSON.parse(row.get('Items'));
             } catch (e) { }
 
             return {
+                rowIndex: index, // 0-based index directly matching the array from getRows()
                 timestamp: row.get('Timestamp'),
                 customerName: row.get('CustomerName'),
                 items: items,
@@ -421,6 +422,155 @@ app.post('/api/admin/store-status', (req, res) => {
 
     const newSettings = updateStoreStatus(isOpen);
     res.json({ success: true, message: `商店已${isOpen ? '開啟' : '關閉'}`, status: newSettings });
+});
+
+// --- Admin Order Management ---
+
+// 1. Add Order (Admin bypasses store open check)
+app.post('/api/admin/order/add', async (req, res) => {
+    try {
+        const { password, customerName, items, total } = req.body;
+
+        // Auth
+        if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
+            return res.status(401).json({ success: false, message: '密碼錯誤' });
+        }
+
+        const doc = await getDoc();
+        if (!doc) {
+            return res.json({ success: true, message: 'Order created (Mock Mode)' });
+        }
+
+        // Validate Stock
+        const currentInventory = await calculateInventory(doc);
+        for (const item of items) {
+            const product = currentInventory.find(p => p.name === item.name);
+            if (!product) return res.json({ success: false, message: `商品 "${item.name}" 不存在` });
+            if (item.qty > product.stock) return res.json({ success: false, message: `"${item.name}" 庫存不足 (剩: ${product.stock})` });
+        }
+
+        // Add Row
+        const sheet = doc.sheetsByIndex[1];
+        await sheet.addRow({
+            Timestamp: new Date().toISOString(),
+            CustomerName: customerName,
+            Items: JSON.stringify(items),
+            Total: total
+        });
+
+        // await updateStats(doc); // Optional: sync stats
+
+        res.json({ success: true, message: '新增訂單成功' });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: '新增失敗' });
+    }
+});
+
+// 2. Delete Order
+app.post('/api/admin/order/delete', async (req, res) => {
+    try {
+        const { password, rowIndex } = req.body; // rowIndex is the index in the array returned by getRows()
+
+        if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
+            return res.status(401).json({ success: false, message: 'Auth failed' });
+        }
+
+        const doc = await getDoc();
+        if (!doc) return res.json({ success: true, message: 'Deleted (Mock)' });
+
+        const sheet = doc.sheetsByIndex[1];
+        const rows = await sheet.getRows();
+
+        if (rowIndex < 0 || rowIndex >= rows.length) {
+            return res.json({ success: false, message: '找不到該訂單 (Index invalid)' });
+        }
+
+        const rowToDelete = rows[rowIndex];
+        await rowToDelete.delete();
+        // await updateStats(doc);
+
+        res.json({ success: true, message: '刪除成功' });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: '刪除失敗' });
+    }
+});
+
+// 3. Update Order
+app.post('/api/admin/order/update', async (req, res) => {
+    try {
+        const { password, rowIndex, newData } = req.body;
+        // newData: { customerName, items: [{name, qty, price}], total }
+
+        if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
+            return res.status(401).json({ success: false, message: 'Auth failed' });
+        }
+
+        const doc = await getDoc();
+        if (!doc) return res.json({ success: true, message: 'Updated (Mock)' });
+
+        const sheet = doc.sheetsByIndex[1];
+        const rows = await sheet.getRows(); // Fetch fresh
+
+        if (rowIndex < 0 || rowIndex >= rows.length) {
+            return res.json({ success: false, message: '訂單不存在' });
+        }
+
+        const targetRow = rows[rowIndex];
+
+        // Stock Re-validation Logic
+        // We need to check if the NEW items can be fulfilled by (Current Stock + Old Items of this order)
+
+        // 1. Calculate current real stock (which includes deduction of the old items)
+        const currentInventory = await calculateInventory(doc);
+
+        // 2. Identify old items from the target row
+        let oldItems = [];
+        try {
+            oldItems = JSON.parse(targetRow.get('Items'));
+        } catch (e) { }
+
+        // 3. Check new items
+        for (const newItem of newData.items) {
+            const product = currentInventory.find(p => p.name === newItem.name);
+            if (!product) return res.json({ success: false, message: `商品 ${newItem.name} 不存在` });
+
+            // How much of this product was in the *old* order?
+            const oldItem = oldItems.find(i => i.name === newItem.name);
+            const oldQty = oldItem ? parseInt(oldItem.qty) : 0;
+            const newQty = parseInt(newItem.qty);
+
+            // Available for this specific edit = Current Free Stock + What we are returning (OldQty)
+            const availableForThisOrder = product.stock + oldQty;
+
+            if (newQty > availableForThisOrder) {
+                return res.json({
+                    success: false,
+                    message: `庫存不足: ${newItem.name} (需求: ${newQty}, 可用: ${availableForThisOrder})`
+                });
+            }
+        }
+
+        // Apply Updates
+        targetRow.assign({
+            CustomerName: newData.customerName,
+            Items: JSON.stringify(newData.items),
+            Total: newData.total,
+            // Timestamp remains unchanged usually, or update if desired? Let's keep original timestamp.
+        });
+        await targetRow.save();
+
+        // await updateStats(doc);
+
+        res.json({ success: true, message: '訂單更新成功' });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: '更新失敗: ' + err.message });
+    }
 });
 
 app.listen(PORT, () => {

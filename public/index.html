@@ -95,6 +95,23 @@
         </div>
     </div>
 
+    <!-- User Details Modal -->
+    <div class="modal-overlay" id="userDetailsModal" style="z-index: 2500;">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>訂單明細</h3>
+                <button class="close-btn" id="closeUserDetailsModal">&times;</button>
+            </div>
+            <div id="userDetailsContent">
+                <!-- JS injected content -->
+            </div>
+            <div style="margin-top: 1.5rem; text-align: right;">
+                <button class="checkout-btn" style="background: var(--text-light);"
+                    onclick="document.getElementById('userDetailsModal').classList.remove('active')">關閉</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div class="toast" id="toast">
         <span id="toastMessage">操作成功</span>
