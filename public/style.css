@@ -384,17 +384,33 @@ header {
   position: fixed;
   bottom: 0.5rem;
   right: 0.5rem;
-  font-size: 0.8rem;
+  font-size: 1.5rem;
   color: #ccc;
   text-decoration: none;
-  opacity: 0.4;
+  opacity: 0.3;
   transition: opacity 0.3s;
   z-index: 99;
+  filter: grayscale(1);
 }
 
 .settings-link:hover {
   opacity: 1;
-  color: #888;
+  filter: grayscale(0);
+}
+
+.announcement-bar {
+  background-color: var(--accent);
+  color: var(--primary-dark);
+  text-align: center;
+  padding: 0.75rem;
+  font-weight: 600;
+  font-size: 1rem;
+  display: none;
+  /* Hidden by default */
+}
+
+.announcement-bar.visible {
+  display: block;
 }
 
 /* Closed Modal Specifics */

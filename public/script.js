@@ -242,6 +242,27 @@ async function fetchInventory() {
     }
 }
 
+// Announcement Logic
+async function fetchAnnouncement() {
+    try {
+        const res = await fetch('/api/announcement');
+        const data = await res.json();
+        if (data.message) {
+            const bar = document.getElementById('announcement-bar');
+            bar.textContent = data.message;
+            bar.classList.add('visible');
+        }
+    } catch (e) {
+        console.error('Failed to fetch announcement', e);
+    }
+}
+
+// Initial Load
+fetchInventory();
+fetchAnnouncement();
+// Track Visit
+fetch('/api/visit', { method: 'POST' }).catch(e => console.error('Tracking failed', e));
+
 // Render Products
 function renderProducts(products) {
     productGrid.innerHTML = '';

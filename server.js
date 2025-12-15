@@ -39,22 +39,45 @@ async function getDoc() {
     return doc;
 }
 
+// Helper: Get Sheets by Name with Fallbacks
+function getSheets(doc) {
+    const findSheet = (names) => {
+        for (const name of names) {
+            if (doc.sheetsByTitle[name]) return doc.sheetsByTitle[name];
+        }
+        return null; // Not found
+    };
+
+    return {
+        inventory: findSheet(['商品', 'Products']),
+        orders: findSheet(['訂單', 'Orders']),
+        stats: findSheet(['統計', 'Statistics']),
+        announcement: findSheet(['公告', 'Announcement']),
+        visit: findSheet(['造訪紀錄', 'Visit Log']),
+        settings: findSheet(['設定', 'Settings'])
+    };
+}
+
 // Helper: Update Statistics Sheet (Sheet 3)
 async function updateStats(doc) {
     try {
-        const inventorySheet = doc.sheetsByIndex[0];
-        const orderSheet = doc.sheetsByIndex[1];
-        const statsSheet = doc.sheetsByIndex[2];
+        const sheets = getSheets(doc);
+        const statsSheet = sheets.stats;
 
         if (!statsSheet) {
             console.warn('Statistics sheet not found');
             return;
         }
 
+        if (!sheets.inventory || !sheets.orders) {
+            console.warn('Inventory or Orders sheet not found, skipping stats update');
+            return;
+        }
+
         // Fetch all data
         const [inventoryRows, orderRows] = await Promise.all([
-            inventorySheet.getRows(),
-            orderSheet.getRows()
+            sheets.inventory.getRows(),
+            sheets.orders.getRows()
         ]);
 
         // Aggregate Sales Data
@@ -138,13 +161,16 @@ async function updateStats(doc) {
 
 // Helper: Calculate Real-time stock
 async function calculateInventory(doc) {
-    const inventorySheet = doc.sheetsByIndex[0];
-    const orderSheet = doc.sheetsByIndex[1];
+    const sheets = getSheets(doc);
 
-    // ... existing login ...
+    if (!sheets.inventory || !sheets.orders) {
+        console.warn('Critical: Inventory or Orders sheet missing');
+        throw new Error('Required sheets not found');
+    }
+
     const [inventoryRows, orderRows] = await Promise.all([
-        inventorySheet.getRows(),
-        orderSheet.getRows()
+        sheets.inventory.getRows(),
+        sheets.orders.getRows()
     ]);
     // ... rest of function ...
 
@@ -179,9 +205,7 @@ async function calculateInventory(doc) {
         if (imageUrl.toString().startsWith('=IMAGE')) {
             const match = imageUrl.match(/"([^"]+)"/);
             if (match) imageUrl = match[1];
-        }
-
-        if (imageUrl.includes('drive.google.com')) {
+        } else if (imageUrl.includes('drive.google.com')) {
             const idMatch = imageUrl.match(/[-\w]{25,}/);
             if (idMatch) imageUrl = `https://drive.google.com/uc?export=view&id=${idMatch[0]}`;
         }
@@ -220,12 +244,17 @@ app.get('/api/orders', async (req, res) => {
         if (!doc) {
             // Mock Orders
             return res.json([
-                { rowIndex: 1, timestamp: new Date().toISOString(), customerName: 'Mock User 1', items: [{ name: 'Carrots', qty: 2 }], total: 100 },
-                { rowIndex: 2, timestamp: new Date().toISOString(), customerName: 'Mock User 2', items: [{ name: 'Tomatoes', qty: 1 }], total: 60 }
+                { rowIndex: 1, timestamp: new Date().toISOString(), customerName: 'Mock User 1', items: [{ name: 'Carrots', qty: 2 }], total: 100 }
             ]);
         }
 
-        const sheet = doc.sheetsByIndex[1];
+        const sheets = getSheets(doc);
+        const sheet = sheets.orders;
+
+        if (!sheet) {
+            return res.status(500).json({ error: 'Orders sheet not found' });
+        }
+
         const rows = await sheet.getRows();
 
         const orders = rows.map((row, index) => {
@@ -250,54 +279,83 @@ app.get('/api/orders', async (req, res) => {
     }
 });
 
-// Helper: Get and Auto-Reset Store Status
-const SETTINGS_FILE = path.join(__dirname, 'server_settings.json');
-
-function getStoreStatus() {
+// Helper: Get and Auto-Reset Store Status (Google Sheet "設定")
+async function getStoreStatus() {
     try {
-        if (!fs.existsSync(SETTINGS_FILE)) {
-            // Create default if not exists
-            const defaultSettings = { isOpen: true, closedAt: null };
-            fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings));
-            return defaultSettings;
-        }
+        const doc = await getDoc();
+        if (!doc) return { isOpen: true, closedAt: null };
 
-        const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
-        let settings = JSON.parse(data);
+        const sheets = getSheets(doc);
+        const sheet = sheets.settings;
+        if (!sheet) return { isOpen: true, closedAt: null };
+
+        await sheet.loadCells('A1:C1');
+        const statusCell = sheet.getCell(0, 1); // B1
+        const timeCell = sheet.getCell(0, 2);   // C1
+
+        // Parse boolean from string or boolean value
+        let isOpen = statusCell.value === true || statusCell.value === 'TRUE';
+        let closedAt = timeCell.value ? timeCell.value.toString() : null;
 
         // Check 3-day reset logic
-        if (!settings.isOpen && settings.closedAt) {
-            const closedTime = new Date(settings.closedAt).getTime();
+        if (!isOpen && closedAt) {
+            const closedTime = new Date(closedAt).getTime();
             const now = Date.now();
             const daysDiff = (now - closedTime) / (1000 * 60 * 60 * 24);
 
             if (daysDiff >= 3) {
                 console.log('Auto-opening store after 3 days');
-                settings.isOpen = true;
-                settings.closedAt = null;
-                fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
+                isOpen = true;
+                closedAt = null;
+
+                // Sync back to sheet
+                statusCell.value = true;
+                timeCell.value = '';
+                await sheet.saveUpdatedCells();
             }
         }
 
-        return settings;
+        return { isOpen, closedAt };
     } catch (error) {
-        console.error('Error reading settings:', error);
+        console.error('Error reading store status:', error);
         return { isOpen: true, closedAt: null };
     }
 }
 
-function updateStoreStatus(isOpen) {
-    const settings = {
-        isOpen: isOpen,
-        closedAt: isOpen ? null : new Date().toISOString()
-    };
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings));
-    return settings;
+async function updateStoreStatus(isOpen) {
+    try {
+        const doc = await getDoc();
+        if (!doc) return { isOpen, closedAt: null };
+
+        const sheets = getSheets(doc);
+        const sheet = sheets.settings;
+        if (!sheet) {
+            console.warn('Settings sheet not found');
+            return { isOpen, closedAt: null };
+        }
+
+        await sheet.loadCells('A1:C1');
+        const labelCell = sheet.getCell(0, 0); // A1
+        const statusCell = sheet.getCell(0, 1); // B1
+        const timeCell = sheet.getCell(0, 2);   // C1
+
+        labelCell.value = '店鋪開關';
+        statusCell.value = isOpen;
+
+        const closedAt = isOpen ? null : new Date().toISOString();
+        timeCell.value = closedAt || '';
+
+        await sheet.saveUpdatedCells();
+        return { isOpen, closedAt };
+    } catch (error) {
+        console.error('Error updating status:', error);
+        throw error;
+    }
 }
 
 // API: Get Store Status
-app.get('/api/store-status', (req, res) => {
-    const status = getStoreStatus();
+app.get('/api/store-status', async (req, res) => {
+    const status = await getStoreStatus();
     res.json(status);
 });
 
@@ -310,8 +368,10 @@ app.get('/api/check-name', async (req, res) => {
         const doc = await getDoc();
         if (!doc) return res.json({ exists: false }); // Mock mode
 
-        const sheet = doc.sheetsByIndex[1];
-        const rows = await sheet.getRows();
+        const sheets = getSheets(doc);
+        if (!sheets.orders) return res.json({ exists: false });
+
+        const rows = await sheets.orders.getRows();
 
         const exists = rows.some(row => {
             const rowName = row.get('CustomerName');
@@ -329,9 +389,9 @@ app.get('/api/check-name', async (req, res) => {
 app.post('/api/order', async (req, res) => {
     try {
         // 0. Check Store Status
-        const status = getStoreStatus();
+        const status = await getStoreStatus();
         if (!status.isOpen) {
-            return res.json({ success: false, message: '本周網頁訂單已截止，如需下單請聯繫 Eva' });
+            return res.json({ success: false, message: '本周網頁訂單已截止' });
         }
 
         const { customerName, items, total } = req.body;
@@ -339,25 +399,31 @@ app.post('/api/order', async (req, res) => {
 
         if (!doc) {
             console.log('Mock Order Received:', { customerName, items, total });
-            return res.json({ success: true, message: 'Order received (Mock Mode)' });
+            return res.json({ success: true, message: 'Mock Order received' });
         }
 
-        // 1. Validate Stock
-        const currentInventory = await calculateInventory(doc);
+        try {
+            // 1. Validate Stock
+            const currentInventory = await calculateInventory(doc);
 
-        for (const item of items) {
-            const product = currentInventory.find(p => p.name === item.name);
-            if (!product) {
-                return res.json({ success: false, message: `商品 "${item.name}" 已下架或不存在` });
+            for (const item of items) {
+                const product = currentInventory.find(p => p.name === item.name);
+                if (!product) {
+                    return res.json({ success: false, message: `商品 "${item.name}" 已下架` });
+                }
+                if (item.qty > product.stock) {
+                    return res.json({ success: false, message: `"${item.name}" 庫存不足` });
+                }
             }
-            if (item.qty > product.stock) {
-                return res.json({ success: false, message: `抱歉，"${item.name}" 剩餘庫存不足 (剩餘: ${product.stock})` });
-            }
+        } catch (e) {
+            return res.json({ success: false, message: 'Inventory Check Failed: ' + e.message });
         }
 
         // 2. Submit Order if validation passes
-        const sheet = doc.sheetsByIndex[1]; // Second sheet
-        await sheet.addRow({
+        const sheets = getSheets(doc);
+        if (!sheets.orders) return res.json({ success: false, message: 'System Error: Orders Sheet missing' });
+
+        await sheets.orders.addRow({
             Timestamp: new Date().toISOString(),
             CustomerName: customerName,
             Items: JSON.stringify(items),
@@ -367,7 +433,7 @@ app.post('/api/order', async (req, res) => {
         // 3. Update Statistics Sheet (Async, don't block response too long or block?)
         // Better to await to ensure consistency, though it might be slower.
         // REMOVED AUTO-UPDATE AS PER FEATURE REQUEST
-        // await updateStats(doc); 
+        // await updateStats(doc);
 
         res.json({ success: true, message: 'Order submitted successfully' });
     } catch (error) {
@@ -413,14 +479,14 @@ app.post('/api/admin/sync-stats', async (req, res) => {
 });
 
 // API: Admin Update Store Status
-app.post('/api/admin/store-status', (req, res) => {
+app.post('/api/admin/store-status', async (req, res) => {
     const { password, isOpen } = req.body;
 
     if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
         return res.status(401).json({ success: false, message: '密碼錯誤' });
     }
 
-    const newSettings = updateStoreStatus(isOpen);
+    const newSettings = await updateStoreStatus(isOpen);
     res.json({ success: true, message: `商店已${isOpen ? '開啟' : '關閉'}`, status: newSettings });
 });
 
@@ -438,20 +504,25 @@ app.post('/api/admin/order/add', async (req, res) => {
 
         const doc = await getDoc();
         if (!doc) {
-            return res.json({ success: true, message: 'Order created (Mock Mode)' });
+            return res.json({ success: true, message: 'Mock Order Created' });
         }
 
-        // Validate Stock
-        const currentInventory = await calculateInventory(doc);
-        for (const item of items) {
-            const product = currentInventory.find(p => p.name === item.name);
-            if (!product) return res.json({ success: false, message: `商品 "${item.name}" 不存在` });
-            if (item.qty > product.stock) return res.json({ success: false, message: `"${item.name}" 庫存不足 (剩: ${product.stock})` });
+        try {
+            const currentInventory = await calculateInventory(doc);
+            for (const item of items) {
+                const product = currentInventory.find(p => p.name === item.name);
+                if (!product) return res.json({ success: false, message: `商品 "${item.name}" 不存在` });
+                if (item.qty > product.stock) return res.json({ success: false, message: `"${item.name}" 庫存不足` });
+            }
+        } catch (e) {
+            return res.json({ success: false, message: 'Stock Check Error: ' + e.message });
         }
+
+        const sheets = getSheets(doc);
+        if (!sheets.orders) return res.json({ success: false, message: 'Orders Sheet Missing' });
 
         // Add Row
-        const sheet = doc.sheetsByIndex[1];
-        await sheet.addRow({
+        await sheets.orders.addRow({
             Timestamp: new Date().toISOString(),
             CustomerName: customerName,
             Items: JSON.stringify(items),
@@ -478,10 +549,12 @@ app.post('/api/admin/order/delete', async (req, res) => {
         }
 
         const doc = await getDoc();
-        if (!doc) return res.json({ success: true, message: 'Deleted (Mock)' });
+        if (!doc) return res.json({ success: true, message: 'Mock Deleted' });
 
-        const sheet = doc.sheetsByIndex[1];
-        const rows = await sheet.getRows();
+        const sheets = getSheets(doc);
+        if (!sheets.orders) return res.json({ success: false, message: 'Orders Sheet Missing' });
+
+        const rows = await sheets.orders.getRows();
 
         if (rowIndex < 0 || rowIndex >= rows.length) {
             return res.json({ success: false, message: '找不到該訂單 (Index invalid)' });
@@ -510,10 +583,12 @@ app.post('/api/admin/order/update', async (req, res) => {
         }
 
         const doc = await getDoc();
-        if (!doc) return res.json({ success: true, message: 'Updated (Mock)' });
+        if (!doc) return res.json({ success: true, message: 'Mock Updated' });
 
-        const sheet = doc.sheetsByIndex[1];
-        const rows = await sheet.getRows(); // Fetch fresh
+        const sheets = getSheets(doc);
+        if (!sheets.orders) return res.json({ success: false, message: 'Orders Sheet Missing' });
+
+        const rows = await sheets.orders.getRows(); // Fetch fresh
 
         if (rowIndex < 0 || rowIndex >= rows.length) {
             return res.json({ success: false, message: '訂單不存在' });
@@ -523,35 +598,38 @@ app.post('/api/admin/order/update', async (req, res) => {
 
         // Stock Re-validation Logic
         // We need to check if the NEW items can be fulfilled by (Current Stock + Old Items of this order)
-
-        // 1. Calculate current real stock (which includes deduction of the old items)
-        const currentInventory = await calculateInventory(doc);
-
-        // 2. Identify old items from the target row
-        let oldItems = [];
         try {
-            oldItems = JSON.parse(targetRow.get('Items'));
-        } catch (e) { }
+            // 1. Calculate current real stock (which includes deduction of the old items)
+            const currentInventory = await calculateInventory(doc);
 
-        // 3. Check new items
-        for (const newItem of newData.items) {
-            const product = currentInventory.find(p => p.name === newItem.name);
-            if (!product) return res.json({ success: false, message: `商品 ${newItem.name} 不存在` });
+            // 2. Identify old items from the target row
+            let oldItems = [];
+            try {
+                oldItems = JSON.parse(targetRow.get('Items'));
+            } catch (e) { }
 
-            // How much of this product was in the *old* order?
-            const oldItem = oldItems.find(i => i.name === newItem.name);
-            const oldQty = oldItem ? parseInt(oldItem.qty) : 0;
-            const newQty = parseInt(newItem.qty);
+            // 3. Check new items
+            for (const newItem of newData.items) {
+                const product = currentInventory.find(p => p.name === newItem.name);
+                if (!product) return res.json({ success: false, message: `商品 ${newItem.name} 不存在` });
 
-            // Available for this specific edit = Current Free Stock + What we are returning (OldQty)
-            const availableForThisOrder = product.stock + oldQty;
+                // How much of this product was in the *old* order?
+                const oldItem = oldItems.find(i => i.name === newItem.name);
+                const oldQty = oldItem ? parseInt(oldItem.qty) : 0;
+                const newQty = parseInt(newItem.qty);
 
-            if (newQty > availableForThisOrder) {
-                return res.json({
-                    success: false,
-                    message: `庫存不足: ${newItem.name} (需求: ${newQty}, 可用: ${availableForThisOrder})`
-                });
+                // Available for this specific edit = Current Free Stock + What we are returning (OldQty)
+                const availableForThisOrder = product.stock + oldQty;
+
+                if (newQty > availableForThisOrder) {
+                    return res.json({
+                        success: false,
+                        message: `庫存不足: ${newItem.name}`
+                    });
+                }
             }
+        } catch (e) {
+            return res.json({ success: false, message: 'Stock Check Error: ' + e.message });
         }
 
         // Apply Updates
@@ -569,7 +647,56 @@ app.post('/api/admin/order/update', async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false, message: '更新失敗: ' + err.message });
+        res.status(500).json({ success: false, message: '更新失敗' });
+    }
+});
+
+// API: Get Announcement
+app.get('/api/announcement', async (req, res) => {
+    try {
+        const doc = await getDoc();
+        if (!doc) return res.json({ message: '' });
+
+        const sheets = getSheets(doc);
+        const sheet = sheets.announcement;
+
+        if (!sheet) {
+            return res.json({ message: '' });
+        }
+
+        // Load reading range for A1
+        await sheet.loadCells('A1');
+        const cell = sheet.getCell(0, 0); // A1
+        const message = cell.value ? cell.value.toString() : '';
+
+        res.json({ message });
+    } catch (error) {
+        console.error('Error fetching announcement:', error);
+        res.json({ message: '' }); // Fail silently for UI
+    }
+});
+
+// API: Record Visit
+app.post('/api/visit', async (req, res) => {
+    try {
+        const doc = await getDoc();
+        if (!doc) return res.json({ success: false });
+
+        const sheets = getSheets(doc);
+        const sheet = sheets.visit;
+
+        if (!sheet) {
+            // Let's just return silently if not found to avoid errors
+            return res.json({ success: false, message: 'Sheet not found' });
+        }
+
+        // Append timestamp to Column A (using addRow)
+        await sheet.addRow([new Date().toISOString()]);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error recording visit:', error);
+        res.json({ success: false });
     }
 });
 

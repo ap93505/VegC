@@ -27,33 +27,39 @@ A premium, full-stack vegetable ordering application built with **Node.js**, **E
 - A Google Cloud Project with **Google Sheets API** enabled.
 
 ### 2. Google Sheets Setup
-Create a new Google Sheet with two tabs:
+Create a new Google Sheet with the following tabs (names can be English or Chinese):
 
-#### **Sheet 1: Inventory (Header Row Required)**
+#### **1. Inventory (Sheet Name: "商品" or "Products")**
 | Name | Price | Unit | Stock | Discount | Image |
 |------|-------|------|-------|----------|-------|
 | Carrots | 50 | kg | 20 | TRUE | http://... |
-| Spinach | 30 | kg | 15 | TRUE | http://... |
 
-- **Discount**: Set to `TRUE` to enable the "3 for $100" offer for that item.
-- **Image**: Can be a direct link, a Google Drive share link, or `=IMAGE("url")`.
+- **Discount**: Set to `TRUE` to enable the "3 for $100" offer.
 
-#### **Sheet 2: Orders (Header Row Required)**
+#### **2. Orders (Sheet Name: "訂單" or "Orders")**
 | Timestamp | CustomerName | Items | Total |
 |-----------|--------------|-------|-------|
 | (Auto) | (User Input) | (JSON) | (Auto) |
 
-**Important**: Share your Google Sheet with the **Service Account Email** (created in step 3) giving it **Editor** access.
-
-#### **Sheet 3: Order Statistics (Header Row Required)**
+#### **3. Stats (Sheet Name: "統計" or "Statistics")**
 | Name | Stock | SoldQuantity | RemainingStock | BuyersList |
 |------|-------|--------------|----------------|------------|
-| Carrots | 20 | (Auto) | (Auto) | (Auto) |
-| Spinach | 15 | (Auto) | (Auto) | (Auto) |
+| (Auto) | (Auto) | (Auto) | (Auto) | (Auto) |
 
-- **Name**: Must match the product names in Sheet 1.
-- **Stock**: Initial stock (manually synced or referenced from Sheet 1).
-- **SoldQuantity, RemainingStock, BuyersList**: Automatically updated by the app.
+#### **4. Announcement (Sheet Name: "公告" or "Announcement")**
+- **Cell A1**: The announcement message text (e.g., "We are closed today!").
+
+#### **5. Visits (Sheet Name: "造訪紀錄" or "Visit Log")**
+- **Column A**: Automatically records timestamps of page visits.
+
+#### **6. Settings (Sheet Name: "設定" or "Settings")**
+- **Cell A1**: "店鋪開關" (Label)
+- **Cell B1**: "TRUE" or "FALSE" (Store Open Status)
+- **Cell C1**: Timestamp (Auto-generated when closed)
+
+**Important**: 
+- Share your Google Sheet with the **Service Account Email** giving it **Editor** access.
+- Tab order does not matter as long as the names match one of the options above.
 
 ### 3. Installation
 
