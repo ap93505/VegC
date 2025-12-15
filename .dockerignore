@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+Dockerfile
+README.md
+DEPLOY_GCP.md
+*.md
+.DS_Store
