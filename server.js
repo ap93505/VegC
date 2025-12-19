@@ -39,6 +39,20 @@ async function getDoc() {
     return doc;
 }
 
+// Helper: Get Current Time in Taipei Timezone (ISO-like format but local)
+function getTaipeiTime() {
+    return new Date().toLocaleString('zh-TW', {
+        timeZone: 'Asia/Taipei',
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).replace(/\//g, '-'); // Optional: Format as YYYY-MM-DD HH:mm:ss for better readability in sheets
+}
+
 // Helper: Get Sheets by Name with Fallbacks
 function getSheets(doc) {
     const findSheet = (names) => {
@@ -56,6 +70,41 @@ function getSheets(doc) {
         visit: findSheet(['造訪紀錄', 'Visit Log']),
         settings: findSheet(['設定', 'Settings'])
     };
+}
+
+
+// Helper: Stringify Items (Readable Format)
+// Format: Name1*Qty1, Name2*Qty2
+function stringifyItems(items) {
+    if (!Array.isArray(items)) return '';
+    return items.map(item => `${item.name}*${item.qty}`).join(', ');
+}
+
+// Helper: Parse Items (Supports JSON and Readable Format)
+function parseItems(str) {
+    if (str === null || str === undefined || str === '') return [];
+
+    // Ensure string
+    if (typeof str !== 'string') {
+        str = String(str);
+    }
+
+    // Try JSON first (Backward Compatibility)
+    if (str.trim().startsWith('[')) {
+        try {
+            return JSON.parse(str);
+        } catch (e) { }
+    }
+
+    // Parse Readable Format: "Name*Qty, Name*Qty"
+    return str.split(',').map(s => {
+        const parts = s.split('*');
+        if (parts.length < 2) return null;
+        const qty = parts.pop().trim(); // Last part is Qty
+        const name = parts.join('*').trim(); // Rejoin rest in case name has *
+        if (!name || !qty) return null;
+        return { name, qty };
+    }).filter(i => i !== null);
 }
 
 // Helper: Update Statistics Sheet (Sheet 3)
@@ -83,50 +132,73 @@ async function updateStats(doc) {
         // Aggregate Sales Data
         const productStats = {}; // { Name: { sold: 0, buyers: { user: qty } } }
 
-        orderRows.forEach(row => {
+        orderRows.forEach((row, rowIndex) => {
             try {
-                const items = JSON.parse(row.get('Items'));
+                const rawItems = row.get('Items');
+                const items = parseItems(rawItems);
+
+                // Debug log if needed, or silent fail
+                // if (!Array.isArray(items)) console.log(`Row ${rowIndex} items invalid`);
+
                 const customer = row.get('CustomerName');
 
                 if (Array.isArray(items)) {
                     items.forEach(item => {
                         if (item.name && item.qty) {
-                            if (!productStats[item.name]) {
-                                productStats[item.name] = { sold: 0, buyers: {} };
+                            // Normalize Key
+                            const key = String(item.name).trim();
+                            if (!productStats[key]) {
+                                productStats[key] = { sold: 0, buyers: {} };
                             }
-                            const qty = parseInt(item.qty);
-                            productStats[item.name].sold += qty;
+                            const qty = parseInt(item.qty) || 0;
+                            productStats[key].sold += qty;
 
                             if (customer) {
-                                if (!productStats[item.name].buyers[customer]) {
-                                    productStats[item.name].buyers[customer] = 0;
+                                const customerKey = String(customer).trim();
+                                if (!productStats[key].buyers[customerKey]) {
+                                    productStats[key].buyers[customerKey] = 0;
                                 }
-                                productStats[item.name].buyers[customer] += qty;
+                                productStats[key].buyers[customerKey] += qty;
                             }
                         }
                     });
                 }
-            } catch (e) { }
+            } catch (e) {
+                console.warn(`Error parsing row ${rowIndex} in stats update:`, e);
+            }
         });
 
         // Resize Stats Sheet to match Inventory count (+1 for header)
-        // Ensure we have enough rows for all products
         const targetRowCount = inventoryRows.length + 1;
 
-        // Resize logic (try-catch in case of permissions or API limits, but usually fine)
+        // Resize logic
         try {
-            await statsSheet.resize({ rowCount: targetRowCount, colCount: 5 });
+            await statsSheet.resize({ rowCount: targetRowCount, columnCount: 5 });
         } catch (e) {
-            console.warn('Resize failed, attempting to proceed with existing cells', e);
+            console.warn('Resize failed, attempting to proceed with existing cells:', e.message);
         }
 
         // Load all cells for the new size
         await statsSheet.loadCells();
 
+        // Check actual loaded size to prevent out-of-bounds
+        // Note: google-spreadsheet internals allow checking rowCount via statsSheet.rowCount usually.
+        const maxRows = statsSheet.rowCount;
+
         // Overwrite Data
         for (let i = 0; i < inventoryRows.length; i++) {
+            const rowIndex = i + 1; // Header is 0
+
+            // Safety Check
+            if (rowIndex >= maxRows) {
+                console.warn(`Skipping stats row ${rowIndex} - Out of bounds (Max: ${maxRows})`);
+                break;
+            }
+
             const invRow = inventoryRows[i];
-            const name = invRow.get('Name');
+            const nameRaw = invRow.get('Name');
+            const name = nameRaw ? String(nameRaw).trim() : 'Unknown Product'; // Handle missing name
+
             const stockStr = invRow.get('Stock');
             const initialStock = parseInt(stockStr) || 0;
 
@@ -138,18 +210,12 @@ async function updateStats(doc) {
                 .map(([user, qty]) => `${user}*${qty}`)
                 .join(', ');
 
-            // Indices: 0=Name, 1=Stock, 2=Sold, 3=Remaining, 4=Buyers
-            const rowIndex = i + 1; // Header is 0
-
             statsSheet.getCell(rowIndex, 0).value = name;
             statsSheet.getCell(rowIndex, 1).value = initialStock;
             statsSheet.getCell(rowIndex, 2).value = data.sold;
             statsSheet.getCell(rowIndex, 3).value = remaining;
             statsSheet.getCell(rowIndex, 4).value = buyersList;
         }
-
-        // Clear any excess rows if resize didn't strictly truncate (though resize usually handles it)
-        // Check grid properties if needed, but resize is authoritative.
 
         await statsSheet.saveUpdatedCells();
 
@@ -177,7 +243,7 @@ async function calculateInventory(doc) {
     const soldTotals = {};
     orderRows.forEach(row => {
         try {
-            const items = JSON.parse(row.get('Items'));
+            const items = parseItems(row.get('Items'));
             if (Array.isArray(items)) {
                 items.forEach(item => {
                     if (item.name && item.qty) {
@@ -244,23 +310,39 @@ app.get('/api/orders', async (req, res) => {
         if (!doc) {
             // Mock Orders
             return res.json([
-                { rowIndex: 1, timestamp: new Date().toISOString(), customerName: 'Mock User 1', items: [{ name: 'Carrots', qty: 2 }], total: 100 }
+                { rowIndex: 1, timestamp: getTaipeiTime(), customerName: 'Mock User 1', items: [{ name: 'Carrots', qty: 2, price: 50 }], total: 100 }
             ]);
         }
 
         const sheets = getSheets(doc);
-        const sheet = sheets.orders;
-
-        if (!sheet) {
-            return res.status(500).json({ error: 'Orders sheet not found' });
+        if (!sheets.orders || !sheets.inventory) {
+            return res.status(500).json({ error: 'Required sheets not found' });
         }
 
-        const rows = await sheet.getRows();
+        // Fetch Orders AND Inventory to re-hydrate prices
+        // (Since readable format Name*Qty doesn't store price, we use current inventory price)
+        const [orderRows, inventoryRows] = await Promise.all([
+            sheets.orders.getRows(),
+            sheets.inventory.getRows()
+        ]);
 
-        const orders = rows.map((row, index) => {
+        // Build Price Map
+        const priceMap = {};
+        inventoryRows.forEach(row => {
+            const name = row.get('Name');
+            const price = row.get('Price');
+            if (name) priceMap[name] = price;
+        });
+
+        const orders = orderRows.map((row, index) => {
             let items = [];
             try {
-                items = JSON.parse(row.get('Items'));
+                // Parse items and inject price
+                const parsed = parseItems(row.get('Items'));
+                items = parsed.map(item => ({
+                    ...item,
+                    price: priceMap[item.name] || '0' // Fallback to 0 if product not found
+                }));
             } catch (e) { }
 
             return {
@@ -342,7 +424,7 @@ async function updateStoreStatus(isOpen) {
         labelCell.value = '店鋪開關';
         statusCell.value = isOpen;
 
-        const closedAt = isOpen ? null : new Date().toISOString();
+        const closedAt = isOpen ? null : getTaipeiTime();
         timeCell.value = closedAt || '';
 
         await sheet.saveUpdatedCells();
@@ -424,9 +506,9 @@ app.post('/api/order', async (req, res) => {
         if (!sheets.orders) return res.json({ success: false, message: 'System Error: Orders Sheet missing' });
 
         await sheets.orders.addRow({
-            Timestamp: new Date().toISOString(),
+            Timestamp: getTaipeiTime(),
             CustomerName: customerName,
-            Items: JSON.stringify(items),
+            Items: stringifyItems(items),
             Total: total
         });
 
@@ -523,9 +605,9 @@ app.post('/api/admin/order/add', async (req, res) => {
 
         // Add Row
         await sheets.orders.addRow({
-            Timestamp: new Date().toISOString(),
+            Timestamp: getTaipeiTime(),
             CustomerName: customerName,
-            Items: JSON.stringify(items),
+            Items: stringifyItems(items),
             Total: total
         });
 
@@ -605,7 +687,7 @@ app.post('/api/admin/order/update', async (req, res) => {
             // 2. Identify old items from the target row
             let oldItems = [];
             try {
-                oldItems = JSON.parse(targetRow.get('Items'));
+                oldItems = parseItems(targetRow.get('Items'));
             } catch (e) { }
 
             // 3. Check new items
@@ -635,7 +717,7 @@ app.post('/api/admin/order/update', async (req, res) => {
         // Apply Updates
         targetRow.assign({
             CustomerName: newData.customerName,
-            Items: JSON.stringify(newData.items),
+            Items: stringifyItems(newData.items),
             Total: newData.total,
             // Timestamp remains unchanged usually, or update if desired? Let's keep original timestamp.
         });
@@ -691,7 +773,8 @@ app.post('/api/visit', async (req, res) => {
         }
 
         // Append timestamp to Column A (using addRow)
-        await sheet.addRow([new Date().toISOString()]);
+        // Use Taipei Time (UTC+8)
+        await sheet.addRow([getTaipeiTime()]);
 
         res.json({ success: true });
     } catch (error) {

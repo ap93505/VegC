@@ -97,7 +97,7 @@ function renderOrders(orders) {
 
     ordersList.innerHTML = orders.map((order, idx) => {
         const itemStr = order.items.map(i => `${i.name} x${i.qty}`).join(', ');
-        const date = new Date(order.timestamp).toLocaleString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+        const date = new Date(order.timestamp).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
         return `
             <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 0.8rem; border: 1px solid #eee;">

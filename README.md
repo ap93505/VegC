@@ -39,7 +39,9 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 #### **2. Orders (Sheet Name: "訂單" or "Orders")**
 | Timestamp | CustomerName | Items | Total |
 |-----------|--------------|-------|-------|
-| (Auto) | (User Input) | (JSON) | (Auto) |
+| (Taipei Time) | (User Input) | `Name*Qty, Name*Qty` | (Auto) |
+
+*Note: Order items are now stored as readable text (e.g., `Carrots*2, Spinach*1`) instead of JSON.*
 
 #### **3. Stats (Sheet Name: "統計" or "Statistics")**
 | Name | Stock | SoldQuantity | RemainingStock | BuyersList |
@@ -50,14 +52,15 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 - **Cell A1**: The announcement message text (e.g., "We are closed today!").
 
 #### **5. Visits (Sheet Name: "造訪紀錄" or "Visit Log")**
-- **Column A**: Automatically records timestamps of page visits.
+- **Column A**: Automatically records timestamps of page visits in **Taipei Time**.
 
 #### **6. Settings (Sheet Name: "設定" or "Settings")**
 - **Cell A1**: "店鋪開關" (Label)
 - **Cell B1**: "TRUE" or "FALSE" (Store Open Status)
-- **Cell C1**: Timestamp (Auto-generated when closed)
+- **Cell C1**: Closed Timestamp (Used for 3-day internal auto-reset logic)
 
 **Important**: 
+- All Timestamps in the system are standardized to **Asia/Taipei (UTC+8)**.
 - Share your Google Sheet with the **Service Account Email** giving it **Editor** access.
 - Tab order does not matter as long as the names match one of the options above.
 
@@ -88,7 +91,10 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 ### 4. Admin Panel
 - Access the settings page at `http://localhost:3000/settings.html`.
 - Use the **ADMIN_PASSWORD** set in your `.env` file to log in.
-- Click **"整理訂單"** to manually update the Order Statistics sheet.
+- **Features**:
+  - 🏪 **Store Status**: Manually Open/Close the store (overrides auto logic).
+  - 📝 **Order Management**: View, Edit, Add, or Delete orders directly.
+  - 📊 **Sync Stats**: Manually trigger an update of the Statistics sheet.
 
 ### 4. Run the Server
 
