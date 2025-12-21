@@ -10,21 +10,23 @@
 </head>
 
 <body>
-    <div id="announcement-bar" class="announcement-bar"></div>
-    <header>
-        <div class="nav-container">
-            <a href="#" class="logo">🌿 FreshVeg</a>
-            <div style="display: flex; gap: 1rem;">
-                <button class="cart-btn" id="ordersToggle" style="background: var(--text-light);">
-                    <span>📋 訂單列表</span>
-                </button>
-                <button class="cart-btn" id="cartToggle">
-                    <span>🛒 購物車</span>
-                    <span id="cartCount">0</span>
-                </button>
+    <div class="sticky-top-container">
+        <div id="announcement-bar" class="announcement-bar"></div>
+        <header>
+            <div class="nav-container">
+                <a href="#" class="logo">🌿 FreshVeg</a>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="cart-btn" id="ordersToggle" style="background: var(--text-light);">
+                        <span>📋 訂單列表</span>
+                    </button>
+                    <button class="cart-btn" id="cartToggle">
+                        <span>🛒 購物車</span>
+                        <span id="cartCount">0</span>
+                    </button>
+                </div>
             </div>
-        </div>
-    </header>
+        </header>
+    </div>
 
     <div class="hero">
         <div>
@@ -89,9 +91,9 @@
     <div class="modal-overlay" id="closedModal" style="z-index: 3000;">
         <div class="modal" style="max-width: 400px;">
             <div class="closed-modal-content">
-                <h3>🚫 本周網頁訂單已截止</h3>
+                <h3>目前商店已關閉</h3>
                 <p>如需下單請聯繫 Eva</p>
-                <button id="closeClosedModalBtn">我了解了</button>
+                <button id="closeClosedModalBtn">我知道了</button>
             </div>
         </div>
     </div>

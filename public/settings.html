@@ -235,10 +235,6 @@
             pointer-events: none;
             transition: opacity 0.3s;
             z-index: 1000;
-            /* Reset style.css conflicts */
-            max-height: none;
-            overflow-y: hidden;
-            border-radius: 0;
         }
 
         .modal.active {
@@ -336,12 +332,12 @@
                 <div class="switch-row">
                     <span class="switch-label">接受訂單 (Store Open)</span>
                     <label class="switch">
-                        <input type="checkbox" id="store-toggle" checked>
+                        <input type="checkbox" id="store-toggle" disabled>
                         <span class="slider"></span>
                     </label>
                 </div>
-                <p id="status-text" style="font-size: 0.95rem; font-weight: 500; margin: 0;">
-                    目前狀態: 開啟 (3天後自動重置)
+                <p id="status-text" style="font-size: 0.95rem; font-weight: 500; margin: 0; color: #888;">
+                    載入中 Loading...
                 </p>
             </div>
 
@@ -522,6 +518,7 @@
 
         function updateToggleUI(isOpen) {
             storeToggle.checked = isOpen;
+            storeToggle.disabled = false; // Enable after data load
             statusText.textContent = isOpen
                 ? '目前狀態: 開啟 (接單中)'
                 : '目前狀態: 關閉 (本周訂單已截止)';

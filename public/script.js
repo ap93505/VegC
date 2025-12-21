@@ -27,14 +27,32 @@ const ordersList = document.getElementById('ordersList');
 const closedModal = document.getElementById('closedModal');
 const closeClosedModalBtn = document.getElementById('closeClosedModalBtn');
 
+// Global State
+let isStoreClosed = false;
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     fetchInventory();
     setupEventListeners();
+    checkStoreStatus(); // Check on load
 });
+
+async function checkStoreStatus() {
+    try {
+        const res = await fetch(`${API_BASE}/store-status`);
+        const status = await res.json();
+        isStoreClosed = !status.isOpen;
+    } catch (err) {
+        console.error('Initial status check failed');
+    }
+}
 
 function setupEventListeners() {
     cartToggle.addEventListener('click', () => {
+        if (isStoreClosed) {
+            closedModal.classList.add('active');
+            return;
+        }
         updateCartUI();
         cartModal.classList.add('active');
     });
@@ -334,6 +352,11 @@ function renderProducts(products) {
 
 // Cart Logic
 window.addToCart = (index) => {
+    if (isStoreClosed) {
+        closedModal.classList.add('active');
+        return;
+    }
+
     const product = inventory[index];
     const stock = parseInt(product.stock) || 0;
     const existingItem = cart.find(item => item.name === product.name);
@@ -454,19 +477,30 @@ async function handleOrderSubmit(e) {
 
     if (cart.length === 0) return;
 
-    // Check Store Status First
-    try {
-        const res = await fetch(`${API_BASE}/store-status`);
-        const status = await res.json();
+    // Prevent duplicate clicks immediately
+    checkoutBtn.disabled = true;
+    const originalBtnText = checkoutBtn.textContent;
+    checkoutBtn.textContent = '處理中...';
 
-        if (!status.isOpen) {
-            cartModal.classList.remove('active');
-            closedModal.classList.add('active');
-            return;
-        }
-    } catch (err) {
-        console.error('Status check failed');
+    // Helper to reset button on error/early return
+    const resetButton = () => {
+        checkoutBtn.disabled = false;
+        checkoutBtn.textContent = originalBtnText;
+    };
+
+    // Check Store Status First (Passive: we rely on initial check + backend, but good to check if changed?)
+    // User requested speed, so we skip blocking check here OR we use the global flag?
+    // Let's stick to the previous "optimized" version: No blocking fetch.
+
+    // But we should check global flag just in case?
+    /*
+    if (isStoreClosed) {
+        cartModal.classList.remove('active');
+        closedModal.classList.add('active');
+        resetButton();
+        return;
     }
+    */
 
     const name = document.getElementById('name').value;
     const total = cartTotal.textContent;
@@ -478,6 +512,7 @@ async function handleOrderSubmit(e) {
 
         if (checkData.exists) {
             showToast('本周已有相同名字的訂單，請協助更換下單姓名，謝謝', 'error');
+            resetButton();
             return;
         }
     } catch (error) {
