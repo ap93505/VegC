@@ -275,11 +275,27 @@ async function fetchAnnouncement() {
     }
 }
 
+// Visit Count Logic
+async function fetchVisitCount() {
+    try {
+        const res = await fetch(`${API_BASE}/visit-count`);
+        const data = await res.json();
+        const el = document.getElementById('visit-count');
+        if (el) {
+            el.innerHTML = `今日造訪人次: ${data.count} 人`;
+        }
+    } catch (e) {
+        console.error('Failed to fetch visit count');
+    }
+}
+
 // Initial Load
 fetchInventory();
 fetchAnnouncement();
+fetchVisitCount();
 // Track Visit
-fetch('/api/visit', { method: 'POST' }).catch(e => console.error('Tracking failed', e));
+fetch('/api/visit', { method: 'POST' }).then(() => fetchVisitCount()) // Update count after recording this visit
+    .catch(e => console.error('Tracking failed', e));
 
 // Render Products
 function renderProducts(products) {
@@ -328,7 +344,7 @@ function renderProducts(products) {
         const discountBadge = '';
 
         const priceDiscountTag = product.discount
-            ? '<span style="background: #e63946; color: white; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;">3件$100</span>'
+            ? '<span style="background: #e63946; color: white; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;">3件$100</span><span style="color: #e63946; font-size: 0.8rem; margin-left: 4px; vertical-align: middle;">(可混搭)</span>'
             : '';
 
         card.innerHTML = `

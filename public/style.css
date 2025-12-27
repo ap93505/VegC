@@ -87,6 +87,7 @@ header {
   padding: 1.5rem;
   border-radius: 0 0 2rem 2rem;
   margin-bottom: 2rem;
+  position: relative;
 }
 
 .hero h1 {

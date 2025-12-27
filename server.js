@@ -256,9 +256,37 @@ async function calculateInventory(doc) {
 
     return inventoryRows.map(row => {
         let imageUrl = row.get('Image');
+
+        // 1. Default fallback
         if (!imageUrl || imageUrl.trim() === '') {
             imageUrl = 'images/default.png';
+        } else {
+            imageUrl = imageUrl.trim();
+
+            // 2. Check for Google Drive Links
+            if (imageUrl.includes('drive.google.com')) {
+                const idMatch = imageUrl.match(/[-\w]{25,}/);
+                if (idMatch) imageUrl = `https://drive.google.com/uc?export=view&id=${idMatch[0]}`;
+            }
+            // 3. Check for Sheets =IMAGE formula
+            else if (imageUrl.toString().startsWith('=IMAGE')) {
+                const match = imageUrl.match(/"([^"]+)"/);
+                if (match) imageUrl = match[1];
+            }
+            // 4. Check for standard URLs (http/https/data)
+            else if (imageUrl.match(/^(http|https|data):/i)) {
+                // Keep as is
+            }
+            // 5. Explicit "images/" path
+            else if (imageUrl.startsWith('images/')) {
+                // Keep as is
+            }
+            // 6. Just filename (e.g. "photo.avif") -> Assume local in images folder
+            else {
+                imageUrl = `images/${imageUrl}`;
+            }
         }
+
         const name = row.get('Name');
         const totalStock = parseInt(row.get('Stock')) || 0;
         const soldQty = soldTotals[name] || 0;
@@ -755,6 +783,62 @@ app.get('/api/announcement', async (req, res) => {
     } catch (error) {
         console.error('Error fetching announcement:', error);
         res.json({ message: '' }); // Fail silently for UI
+    }
+});
+
+// API: Get Daily Visit Count
+app.get('/api/visit-count', async (req, res) => {
+    try {
+        const doc = await getDoc();
+        if (!doc) return res.json({ count: 0 });
+
+        const sheets = getSheets(doc);
+        const sheet = sheets.visit;
+        if (!sheet) return res.json({ count: 0 });
+
+        const rows = await sheet.getRows();
+
+        // Get today's date string prefix (YYYY-MM-DD)
+        // We reuse getTaipeiTime() logic but just take the date part
+        const fullTime = getTaipeiTime();
+        const todayDate = fullTime.split(' ')[0]; // "2023-10-25"
+
+        // Count rows that start with today's date
+        // Assuming Column header is 'Timestamp' (based on addRow logs, it likely uses default headers or just index)
+        // Actually, addRow([val]) might not adhere to headers if not set up.
+        // But getRows returns objects keyed by header. 
+        // If header is 'Timestamp', fine. If strictly row array, we might need access.
+        // Let's assume the first column is 'Timestamp' if header row exists.
+
+        // If sheet has no header row defined in code, we might need to be careful.
+        // But let's assume standard usage.
+
+        let count = 0;
+        rows.forEach(row => {
+            // Try 'Timestamp' header or just the first value if accessible?
+            // google-spreadsheet row object usually allows access by header.
+            // Let's try to grab the value from the first column if name unknown, 
+            // but strict mode requires header name.
+            // Let's assume header is "Timestamp" because previous code might have set it or user did.
+            // Wait, previous code `await sheet.addRow([getTaipeiTime()]);` just piles data.
+            // If the sheet has a header "Timestamp", good.
+            // Robust method: Check if row element 0 matches.
+
+            // Actually, safe way:
+            const val = row._rawData[0]; // Internal access or get by header if known. 
+            // Let's use get('Timestamp') and hope. If undefined, maybe 'A'?
+
+            // Better: Filter.
+            const ts = row.get('Timestamp') || row._rawData[0];
+            if (ts && ts.startsWith(todayDate)) {
+                count++;
+            }
+        });
+
+        res.json({ count });
+    } catch (error) {
+        console.error('Error counting visits:', error);
+        res.json({ count: 0 });
     }
 });
 
