@@ -519,6 +519,7 @@ async function handleOrderSubmit(e) {
     */
 
     const name = document.getElementById('name').value;
+    const pickupLocation = document.getElementById('pickupLocation').value;
     const total = cartTotal.textContent;
 
     // Check Duplicate Name
@@ -540,6 +541,7 @@ async function handleOrderSubmit(e) {
 
     const orderData = {
         customerName: name,
+        pickupLocation: pickupLocation,
         items: cart.map(item => ({ name: item.name, qty: item.quantity, price: item.price })),
         total: total
     };

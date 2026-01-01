@@ -130,17 +130,20 @@ async function updateStats(doc) {
         ]);
 
         // Aggregate Sales Data
-        const productStats = {}; // { Name: { sold: 0, buyers: { user: qty } } }
+        const productStats = {}; // { Name: { sold: 0, soldA: 0, soldD: 0, buyers: { user: qty } } }
 
         orderRows.forEach((row, rowIndex) => {
             try {
                 const rawItems = row.get('Items');
                 const items = parseItems(rawItems);
 
-                // Debug log if needed, or silent fail
-                // if (!Array.isArray(items)) console.log(`Row ${rowIndex} items invalid`);
+                // NEW SCHEMA: Location is its own column
+                const location = row.get('Location') || '';
+                const customer = row.get('CustomerName') || '';
 
-                const customer = row.get('CustomerName');
+                // Determine Location (Check both for backward compatibility)
+                const isA = location.includes('A棟25F') || customer.includes('A棟25F');
+                const isD = location.includes('D棟17F') || customer.includes('D棟17F');
 
                 if (Array.isArray(items)) {
                     items.forEach(item => {
@@ -148,17 +151,21 @@ async function updateStats(doc) {
                             // Normalize Key
                             const key = String(item.name).trim();
                             if (!productStats[key]) {
-                                productStats[key] = { sold: 0, buyers: {} };
+                                productStats[key] = { sold: 0, soldA: 0, soldD: 0, buyers: {} };
                             }
                             const qty = parseInt(item.qty) || 0;
                             productStats[key].sold += qty;
+                            if (isA) productStats[key].soldA += qty;
+                            if (isD) productStats[key].soldD += qty;
 
                             if (customer) {
-                                const customerKey = String(customer).trim();
-                                if (!productStats[key].buyers[customerKey]) {
-                                    productStats[key].buyers[customerKey] = 0;
+                                // Clean Customer Name (Remove Location Suffix)
+                                const cleanName = String(customer).replace(/\s*\([^)]+\)$/, '').trim();
+
+                                if (!productStats[key].buyers[cleanName]) {
+                                    productStats[key].buyers[cleanName] = 0;
                                 }
-                                productStats[key].buyers[customerKey] += qty;
+                                productStats[key].buyers[cleanName] += qty;
                             }
                         }
                     });
@@ -171,18 +178,27 @@ async function updateStats(doc) {
         // Resize Stats Sheet to match Inventory count (+1 for header)
         const targetRowCount = inventoryRows.length + 1;
 
-        // Resize logic
+        // Resize logic (7 columns now: Name, Stock, Total, A, D, Left, Buyers)
         try {
-            await statsSheet.resize({ rowCount: targetRowCount, columnCount: 5 });
+            await statsSheet.resize({ rowCount: targetRowCount, columnCount: 7 });
+
+            // Optional: Set Headers if empty (only doing this defensively)
+            await statsSheet.loadCells('A1:G1');
+            statsSheet.getCell(0, 0).value = '品項';
+            statsSheet.getCell(0, 1).value = '庫存';
+            statsSheet.getCell(0, 2).value = 'A棟25F';
+            statsSheet.getCell(0, 3).value = 'D棟17F';
+            statsSheet.getCell(0, 4).value = '總售出';
+            statsSheet.getCell(0, 5).value = '剩餘';
+            statsSheet.getCell(0, 6).value = '購買人';
+            await statsSheet.saveUpdatedCells();
         } catch (e) {
-            console.warn('Resize failed, attempting to proceed with existing cells:', e.message);
+            console.warn('Resize/Header update failed:', e.message);
         }
 
         // Load all cells for the new size
         await statsSheet.loadCells();
 
-        // Check actual loaded size to prevent out-of-bounds
-        // Note: google-spreadsheet internals allow checking rowCount via statsSheet.rowCount usually.
         const maxRows = statsSheet.rowCount;
 
         // Overwrite Data
@@ -197,12 +213,12 @@ async function updateStats(doc) {
 
             const invRow = inventoryRows[i];
             const nameRaw = invRow.get('Name');
-            const name = nameRaw ? String(nameRaw).trim() : 'Unknown Product'; // Handle missing name
+            const name = nameRaw ? String(nameRaw).trim() : 'Unknown Product';
 
             const stockStr = invRow.get('Stock');
             const initialStock = parseInt(stockStr) || 0;
 
-            const data = productStats[name] || { sold: 0, buyers: {} };
+            const data = productStats[name] || { sold: 0, soldA: 0, soldD: 0, buyers: {} };
             const remaining = Math.max(0, initialStock - data.sold);
 
             // Format buyers list
@@ -212,9 +228,14 @@ async function updateStats(doc) {
 
             statsSheet.getCell(rowIndex, 0).value = name;
             statsSheet.getCell(rowIndex, 1).value = initialStock;
-            statsSheet.getCell(rowIndex, 2).value = data.sold;
-            statsSheet.getCell(rowIndex, 3).value = remaining;
-            statsSheet.getCell(rowIndex, 4).value = buyersList;
+
+            // Hide 0s by using || '' (Since 0 is falsy)
+            statsSheet.getCell(rowIndex, 2).value = data.soldA || '';
+            statsSheet.getCell(rowIndex, 3).value = data.soldD || '';
+            statsSheet.getCell(rowIndex, 4).value = data.sold || '';
+
+            statsSheet.getCell(rowIndex, 5).value = remaining;
+            statsSheet.getCell(rowIndex, 6).value = buyersList;
         }
 
         await statsSheet.saveUpdatedCells();
@@ -373,10 +394,16 @@ app.get('/api/orders', async (req, res) => {
                 }));
             } catch (e) { }
 
+            // Combine Location and Name for backwards compatibility with Frontend
+            // User Request (Step 130): Do NOT show location in Order List.
+            // const loc = row.get('Location');
+            // const name = row.get('CustomerName');
+            // const displayName = loc ? `${name} (${loc})` : name;
+
             return {
                 rowIndex: index, // 0-based index directly matching the array from getRows()
                 timestamp: row.get('Timestamp'),
-                customerName: row.get('CustomerName'),
+                customerName: row.get('CustomerName'), // Just return the name
                 items: items,
                 total: row.get('Total')
             };
@@ -504,11 +531,16 @@ app.post('/api/order', async (req, res) => {
             return res.json({ success: false, message: '本周網頁訂單已截止' });
         }
 
-        const { customerName, items, total } = req.body;
+        const { customerName: nameRaw, pickupLocation, items, total } = req.body;
+        // OLD: Append location to name
+        // const customerName = pickupLocation ? `${nameRaw} (${pickupLocation})` : nameRaw;
+
+        // NEW: We write separately into Location col and CustomerName col.
+
         const doc = await getDoc();
 
         if (!doc) {
-            console.log('Mock Order Received:', { customerName, items, total });
+            console.log('Mock Order Received:', { nameRaw, pickupLocation, items, total });
             return res.json({ success: true, message: 'Mock Order received' });
         }
 
@@ -535,7 +567,8 @@ app.post('/api/order', async (req, res) => {
 
         await sheets.orders.addRow({
             Timestamp: getTaipeiTime(),
-            CustomerName: customerName,
+            Location: pickupLocation || '', // NEW COLUMN
+            CustomerName: nameRaw,
             Items: stringifyItems(items),
             Total: total
         });

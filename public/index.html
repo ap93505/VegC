@@ -83,7 +83,15 @@
                     <label class="form-label" for="name">姓名</label>
                     <input type="text" id="name" class="form-input" required placeholder="請輸入您的大名">
                 </div>
-                <!-- Phone input removed -->
+                <div class="form-group">
+                    <label class="form-label" for="pickupLocation">取貨地點</label>
+                    <select id="pickupLocation" class="form-input" required>
+                        <option value="" disabled selected>請選擇取貨地點</option>
+                        <option value="A棟25F">A棟25F</option>
+                        <option value="D棟17F">D棟17F</option>
+                    </select>
+                </div>
+
                 <button type="submit" class="checkout-btn" disabled id="checkoutBtn">立即下單</button>
             </form>
         </div>
