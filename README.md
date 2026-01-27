@@ -14,11 +14,13 @@ A premium, full-stack vegetable ordering application built with **Node.js**, **E
     - Mix & match supported.
     - Smart calculation: Bundles the 3 most expensive items into the discount; remaining items are charged at original price.
   - 📋 **Order List**: View today's orders in real-time to avoid duplicate purchases.
+  - 📍 **Location Support**: Customers can select pickup locations (e.g., A棟25F, D棟17F).
 
 - **Backend (Node.js + Google Sheets)**
   - 🔄 **Google Sheets API**: Uses Google Sheets as a CMS and Database.
   - 🛡️ **Stock Validation**: Double-checks stock on the server before accepting orders.
   - 🖼️ **Image Parsing**: Supports direct URLs, Drive links, and `=IMAGE()` formulas.
+  - 📦 **Order Archiving**: Move old orders to a history sheet and clear the current board with one click.
 
 ## 🚀 Setup Guide
 
@@ -37,9 +39,9 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 - **Discount**: Set to `TRUE` to enable the "3 for $100" offer.
 
 #### **2. Orders (Sheet Name: "訂單" or "Orders")**
-| Timestamp | CustomerName | Items | Total |
-|-----------|--------------|-------|-------|
-| (Taipei Time) | (User Input) | `Name*Qty, Name*Qty` | (Auto) |
+| Timestamp | CustomerName | Items | Total | Location |
+|-----------|--------------|-------|-------|----------|
+| (Taipei Time) | (User Input) | `Name*Qty, Name*Qty` | (Auto) | (e.g., A棟25F) |
 
 *Note: Order items are now stored as readable text (e.g., `Carrots*2, Spinach*1`) instead of JSON.*
 
@@ -58,6 +60,9 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 - **Cell A1**: "店鋪開關" (Label)
 - **Cell B1**: "TRUE" or "FALSE" (Store Open Status)
 - **Cell C1**: Closed Timestamp (Used for 3-day internal auto-reset logic)
+
+#### **7. History (Sheet Name: "訂單歷史紀錄" or "Order History")**
+- Stores archived orders with the same structure as the Orders sheet.
 
 **Important**: 
 - All Timestamps in the system are standardized to **Asia/Taipei (UTC+8)**.
@@ -92,8 +97,10 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 - Access the settings page at `http://localhost:3000/settings.html`.
 - Use the **ADMIN_PASSWORD** set in your `.env` file to log in.
 - **Features**:
-  - 🏪 **Store Status**: Manually Open/Close the store (overrides auto logic).
+  - 🏪 **Store Status**: Manually Open/Close the store (overrides auto logic). **Closing the store automatically triggers a Sync Stats update.**
   - 📝 **Order Management**: View, Edit, Add, or Delete orders directly.
+  - 📍 **Location Management**: Edit pickup locations for orders.
+  - 📦 **Archive Orders**: One-click archive to history sheet.
   - 📊 **Sync Stats**: Manually trigger an update of the Statistics sheet.
 
 ### 4. Run the Server
@@ -114,7 +121,7 @@ Visit `http://localhost:3000` to start ordering!
 If no Google credentials are provided, the app will automatically fall back to **Mock Mode**, serving sample data so you can test the UI and Logic without a real spreadsheet.
 
 ## 🛠️ Tech Stack
-- **Frontend**: HTML5, CSS3 (Variables, Flex/Grid), Vanilla JavaScript.
+- **Frontend**: HTML5, CSS3 (Variables, Flex/Grid), Vanilla JavaScript, SweetAlert2.
 - **Backend**: Node.js, Express.
 - **Database**: Google Sheets (via `google-spreadsheet`).
 

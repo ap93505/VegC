@@ -5,8 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FreshVeg - Admin Settings</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .admin-container {
             max-width: 600px;
@@ -347,6 +349,14 @@
             <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-light);">
                 點擊此按鈕將計算所有訂單並更新統計表。
             </p>
+
+            <button id="archive-btn" class="checkout-btn btn-large"
+                style="background-color: #64748b; margin-top: 1.5rem;">
+                📦 歸檔訂單 (Archive Orders)
+            </button>
+            <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-light);">
+                將目前所有訂單移至歷史紀錄並清空列表。
+            </p>
         </div>
 
         <!-- Order Management Section -->
@@ -368,6 +378,15 @@
                 <div class="form-group">
                     <label>客戶姓名 Customer Name</label>
                     <input type="text" id="edit-name" class="form-input" placeholder="Name">
+                </div>
+
+                <div class="form-group">
+                    <label>取貨地點 Location</label>
+                    <select id="edit-location" class="form-input">
+                        <option value="">(無 None)</option>
+                        <option value="A棟25F">A棟25F</option>
+                        <option value="D棟17F">D棟17F</option>
+                    </select>
                 </div>
 
                 <div class="form-group">
@@ -413,6 +432,7 @@
         const passwordInput = document.getElementById('admin-password');
         const loginBtn = document.getElementById('login-btn');
         const syncBtn = document.getElementById('sync-btn');
+        const archiveBtn = document.getElementById('archive-btn');
         const storeToggle = document.getElementById('store-toggle');
         const statusText = document.getElementById('status-text');
         const toast = document.getElementById('toast');
@@ -470,7 +490,8 @@
         });
 
         // Sync Logic
-        syncBtn.addEventListener('click', async () => {
+        // Sync Logic
+        async function syncOrders() {
             syncBtn.disabled = true;
             syncBtn.innerText = '⏳ 處理中...';
 
@@ -501,6 +522,54 @@
             } finally {
                 syncBtn.disabled = false;
                 syncBtn.innerText = '📊 整理訂單 (Sync Stats)';
+            }
+        }
+
+        syncBtn.addEventListener('click', syncOrders);
+
+        // Archive Logic
+        archiveBtn.addEventListener('click', async () => {
+            const result = await Swal.fire({
+                title: '確定要歸檔嗎？',
+                text: "這將會將目前所有訂單移至「訂單歷史紀錄」並清空目前的訂單列表。此操作無法復原。",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: '確定歸檔',
+                cancelButtonText: '取消'
+            });
+
+            if (!result.isConfirmed) return;
+
+            archiveBtn.disabled = true;
+            archiveBtn.innerText = '📦 歸檔中...';
+
+            try {
+                const response = await fetch('/api/admin/archive-orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: currentPassword })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    await Swal.fire(
+                        '歸檔完成!',
+                        data.message,
+                        'success'
+                    );
+                    fetchAdminOrders(); // Refresh list (should be empty)
+                } else {
+                    showToast(data.message || 'Error', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('連線錯誤', 'error');
+            } finally {
+                archiveBtn.disabled = false;
+                archiveBtn.innerText = '📦 歸檔訂單 (Archive Orders)';
             }
         });
 
@@ -541,6 +610,11 @@
                 const data = await response.json();
                 if (data.success) {
                     showToast(data.message);
+                    // If closing the store (isOpen == false), auto-sync stats
+                    if (!isOpen) {
+                        showToast('正在自動整理訂單...');
+                        await syncOrders();
+                    }
                 } else {
                     showToast(data.message, 'error');
                     // Revert if failed
@@ -593,7 +667,9 @@
                 return `
                     <div class="order-card">
                         <div class="order-info">
-                            <h4>${order.customerName} <span style="font-weight:normal; font-size:0.8rem; color:#888;">($${order.total})</span></h4>
+                            <h4>${order.customerName} <span style="font-weight:normal; font-size:0.8rem; color:#666;">($${order.total})</span>
+                                <br><span style="font-size:0.85rem; font-weight:normal; color:#4b5563;">📍 ${order.location || '無地點'}</span>
+                            </h4>
                             <p>${itemStr}</p>
                             <p style="font-size:0.75rem; margin-top:0.2rem;">${new Date(order.timestamp).toLocaleString()}</p>
                         </div>
@@ -626,6 +702,7 @@
                 editingOrderRealIndex = null;
                 modalTitle.innerText = "新增訂單 Add Order";
                 nameInput.value = "";
+                document.getElementById('edit-location').value = "";
                 // Reset quantities
                 document.querySelectorAll('.modal-qty').forEach(inp => inp.value = 0);
             } else {
@@ -635,6 +712,7 @@
                 editingOrderRealIndex = order.rowIndex;
                 modalTitle.innerText = "編輯訂單 Edit Order";
                 nameInput.value = order.customerName;
+                document.getElementById('edit-location').value = order.location || '';
 
                 // Fill quantities
                 order.items.forEach(item => {
@@ -722,6 +800,7 @@
 
         document.getElementById('save-order-btn').addEventListener('click', async () => {
             const customerName = nameInput.value.trim();
+            const location = document.getElementById('edit-location').value.trim();
             if (!customerName) return showToast('請輸入姓名', 'error');
 
             const items = [];
@@ -749,12 +828,12 @@
                 password: currentPassword,
                 rowIndex: editingOrderRealIndex, // Ignored for add
                 newData: { // Wrapper for edit, or direct fields for add?
-                    // Server for 'Add' expects: customerName, items, total directly
-                    // Server for 'Update' expects: newData: { customerName, items, total }
-                    customerName, items, total
+                    // Server for 'Add' expects: customerName, items, total, pickupLocation
+                    // Server for 'Update' expects: newData: { customerName, items, total, location }
+                    customerName, items, total, location
                 },
                 // For Add
-                customerName, items, total
+                customerName, items, total, pickupLocation: location
             };
 
             try {
@@ -779,7 +858,18 @@
         });
 
         window.deleteOrder = async (rowIndex) => {
-            if (!confirm('確定要刪除此訂單嗎？刪除後庫存將會釋出。')) return;
+            const result = await Swal.fire({
+                title: '確定要刪除此訂單嗎？',
+                text: "刪除後庫存將會釋出。此操作無法復原。",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: '確定刪除',
+                cancelButtonText: '取消'
+            });
+
+            if (!result.isConfirmed) return;
 
             try {
                 const res = await fetch('/api/admin/order/delete', {
@@ -789,7 +879,11 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('已刪除');
+                    await Swal.fire(
+                        '已刪除!',
+                        '訂單已成功刪除。',
+                        'success'
+                    );
                     fetchAdminOrders();
                 } else {
                     showToast(data.message, 'error');

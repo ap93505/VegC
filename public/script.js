@@ -120,7 +120,7 @@ function renderOrders(orders) {
         return `
             <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 0.8rem; border: 1px solid #eee;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-weight: bold;">
-                    <span>${order.customerName}</span>
+                    <span>${order.customerName} <span style="font-weight:normal; font-size:0.9rem; color:#666;">(${order.location || '無地點'})</span></span>
                     <span style="color: #666; font-size: 0.9rem;">${date}</span>
                 </div>
                 <div style="color: #4b5563; font-size: 0.95rem; margin-bottom: 0.5rem;">
@@ -150,20 +150,21 @@ window.openUserDetails = (idx) => {
     const order = userOrders[idx];
     userDetailsModal.classList.add('active');
 
+    // Update Title
+    const titleEl = document.getElementById('userDetailsTitle');
+    if (titleEl) titleEl.innerHTML = `訂單明細 <span style="font-size:0.9rem; font-weight:normal;">(${order.customerName} - ${order.location || '無地點'})</span>`;
+
     // Logic similar to admin side
     let normalItems = [];
     let discountItems = [];
     let total = 0;
 
     order.items.forEach(item => {
-        // Find product in current inventory to check discount status
-        // Note: If product doesn't exist anymore, we might miss discount info.
-        // Improvement: Backend should ideally store price/discount snapshot.
-        // For now, using current inventory state as proxy.
+
         const product = inventory.find(p => p.name === item.name);
-        // Fallback: Check if we can infer from stored implementation plan or just assume false
         const isDiscount = product ? product.discount : false;
         const price = parseInt(item.price);
+
 
         for (let i = 0; i < item.qty; i++) {
             if (isDiscount) discountItems.push({ name: item.name, price: price });
@@ -504,19 +505,8 @@ async function handleOrderSubmit(e) {
         checkoutBtn.textContent = originalBtnText;
     };
 
-    // Check Store Status First (Passive: we rely on initial check + backend, but good to check if changed?)
-    // User requested speed, so we skip blocking check here OR we use the global flag?
-    // Let's stick to the previous "optimized" version: No blocking fetch.
+    // Check Store Status First
 
-    // But we should check global flag just in case?
-    /*
-    if (isStoreClosed) {
-        cartModal.classList.remove('active');
-        closedModal.classList.add('active');
-        resetButton();
-        return;
-    }
-    */
 
     const name = document.getElementById('name').value;
     const pickupLocation = document.getElementById('pickupLocation').value;
@@ -534,9 +524,6 @@ async function handleOrderSubmit(e) {
         }
     } catch (error) {
         console.error('Name check failed:', error);
-        // Optional: Block or allow? Let's allow if check fails to avoid blocking users on error? 
-        // Or fail safe? User asked for feature, so let's log but maybe proceed or alert. 
-        // For now, if check fails entirely (500), we probably shouldn't block, but if it returns true, we block.
     }
 
     const orderData = {

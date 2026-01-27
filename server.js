@@ -68,7 +68,8 @@ function getSheets(doc) {
         stats: findSheet(['統計', 'Statistics']),
         announcement: findSheet(['公告', 'Announcement']),
         visit: findSheet(['造訪紀錄', 'Visit Log']),
-        settings: findSheet(['設定', 'Settings'])
+        settings: findSheet(['設定', 'Settings']),
+        history: findSheet(['訂單歷史紀錄', 'Order History'])
     };
 }
 
@@ -137,11 +138,10 @@ async function updateStats(doc) {
                 const rawItems = row.get('Items');
                 const items = parseItems(rawItems);
 
-                // NEW SCHEMA: Location is its own column
                 const location = row.get('Location') || '';
                 const customer = row.get('CustomerName') || '';
 
-                // Determine Location (Check both for backward compatibility)
+                // Determine Location
                 const isA = location.includes('A棟25F') || customer.includes('A棟25F');
                 const isD = location.includes('D棟17F') || customer.includes('D棟17F');
 
@@ -175,8 +175,8 @@ async function updateStats(doc) {
             }
         });
 
-        // Resize Stats Sheet to match Inventory count (+1 for header)
-        const targetRowCount = inventoryRows.length + 1;
+        // Resize Stats Sheet to match Inventory count (+1 for header +1 for summary)
+        const targetRowCount = inventoryRows.length + 2;
 
         // Resize logic (7 columns now: Name, Stock, Total, A, D, Left, Buyers)
         try {
@@ -236,6 +236,19 @@ async function updateStats(doc) {
 
             statsSheet.getCell(rowIndex, 5).value = remaining;
             statsSheet.getCell(rowIndex, 6).value = buyersList;
+        }
+
+        // Add Summary Row
+        const summaryRowIndex = inventoryRows.length + 1;
+        // Total Orders Count
+        const totalOrders = orderRows.length;
+        // Assuming 1 Order = 1 Bag for now as per "needs X bags" usually equals order count unless specified otherwise
+        const totalBags = totalOrders;
+
+        if (summaryRowIndex < maxRows) {
+            statsSheet.getCell(summaryRowIndex, 6).value = `共計${totalOrders}筆訂單，需要${totalBags}個袋子`;
+            // Clear other cells in this row just in case
+            for (let c = 0; c < 6; c++) statsSheet.getCell(summaryRowIndex, c).value = '';
         }
 
         await statsSheet.saveUpdatedCells();
@@ -395,15 +408,11 @@ app.get('/api/orders', async (req, res) => {
             } catch (e) { }
 
             // Combine Location and Name for backwards compatibility with Frontend
-            // User Request (Step 130): Do NOT show location in Order List.
-            // const loc = row.get('Location');
-            // const name = row.get('CustomerName');
-            // const displayName = loc ? `${name} (${loc})` : name;
-
             return {
                 rowIndex: index, // 0-based index directly matching the array from getRows()
                 timestamp: row.get('Timestamp'),
-                customerName: row.get('CustomerName'), // Just return the name
+                customerName: row.get('CustomerName'),
+                location: row.get('Location') || '',
                 items: items,
                 total: row.get('Total')
             };
@@ -532,10 +541,6 @@ app.post('/api/order', async (req, res) => {
         }
 
         const { customerName: nameRaw, pickupLocation, items, total } = req.body;
-        // OLD: Append location to name
-        // const customerName = pickupLocation ? `${nameRaw} (${pickupLocation})` : nameRaw;
-
-        // NEW: We write separately into Location col and CustomerName col.
 
         const doc = await getDoc();
 
@@ -567,16 +572,15 @@ app.post('/api/order', async (req, res) => {
 
         await sheets.orders.addRow({
             Timestamp: getTaipeiTime(),
-            Location: pickupLocation || '', // NEW COLUMN
+            Location: pickupLocation || '',
             CustomerName: nameRaw,
             Items: stringifyItems(items),
             Total: total
         });
 
-        // 3. Update Statistics Sheet (Async, don't block response too long or block?)
-        // Better to await to ensure consistency, though it might be slower.
-        // REMOVED AUTO-UPDATE AS PER FEATURE REQUEST
-        // await updateStats(doc);
+        // 3. Update Statistics Sheet (Async)
+        // Note: Auto-update removed per feature request to improve speed
+
 
         res.json({ success: true, message: 'Order submitted successfully' });
     } catch (error) {
@@ -621,6 +625,53 @@ app.post('/api/admin/sync-stats', async (req, res) => {
     }
 });
 
+// API: Admin Archive Orders
+app.post('/api/admin/archive-orders', async (req, res) => {
+    try {
+        const { password } = req.body;
+        if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
+            return res.status(401).json({ success: false, message: '密碼錯誤' });
+        }
+
+        const doc = await getDoc();
+        if (!doc) return res.json({ success: true, message: 'Mock Archived' });
+
+        const sheets = getSheets(doc);
+        if (!sheets.orders || !sheets.history) {
+            return res.json({ success: false, message: 'Sheets missing (Orders or History)' });
+        }
+
+        const orderRows = await sheets.orders.getRows();
+        if (orderRows.length === 0) {
+            return res.json({ success: true, message: '無可歸檔的訂單' });
+        }
+
+        // 1. Copy to History
+        const historyRows = orderRows.map(row => ({
+            Timestamp: row.get('Timestamp'),
+            CustomerName: row.get('CustomerName'),
+            Location: row.get('Location') || '',
+            Items: row.get('Items'),
+            Total: row.get('Total')
+        }));
+
+        await sheets.history.addRows(historyRows);
+
+        await sheets.history.addRows(historyRows);
+
+        // 2. Delete all rows from Orders
+        for (let i = orderRows.length - 1; i >= 0; i--) {
+            await orderRows[i].delete();
+        }
+
+        res.json({ success: true, message: `已歸檔 ${orderRows.length} 筆訂單` });
+
+    } catch (e) {
+        console.error('Archive error:', e);
+        res.status(500).json({ success: false, message: '歸檔失敗: ' + e.message });
+    }
+});
+
 // API: Admin Update Store Status
 app.post('/api/admin/store-status', async (req, res) => {
     const { password, isOpen } = req.body;
@@ -638,7 +689,7 @@ app.post('/api/admin/store-status', async (req, res) => {
 // 1. Add Order (Admin bypasses store open check)
 app.post('/api/admin/order/add', async (req, res) => {
     try {
-        const { password, customerName, items, total } = req.body;
+        const { password, customerName, pickupLocation, items, total } = req.body;
 
         // Auth
         if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
@@ -668,11 +719,10 @@ app.post('/api/admin/order/add', async (req, res) => {
         await sheets.orders.addRow({
             Timestamp: getTaipeiTime(),
             CustomerName: customerName,
+            Location: pickupLocation || '',
             Items: stringifyItems(items),
             Total: total
         });
-
-        // await updateStats(doc); // Optional: sync stats
 
         res.json({ success: true, message: '新增訂單成功' });
 
@@ -719,7 +769,7 @@ app.post('/api/admin/order/delete', async (req, res) => {
 app.post('/api/admin/order/update', async (req, res) => {
     try {
         const { password, rowIndex, newData } = req.body;
-        // newData: { customerName, items: [{name, qty, price}], total }
+        // newData: { customerName, location, items: [{name, qty, price}], total }
 
         if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
             return res.status(401).json({ success: false, message: 'Auth failed' });
@@ -778,6 +828,7 @@ app.post('/api/admin/order/update', async (req, res) => {
         // Apply Updates
         targetRow.assign({
             CustomerName: newData.customerName,
+            Location: newData.location || '', // NEW
             Items: stringifyItems(newData.items),
             Total: newData.total,
             // Timestamp remains unchanged usually, or update if desired? Let's keep original timestamp.
