@@ -383,10 +383,15 @@
                 <div class="form-group">
                     <label>取貨地點 Location</label>
                     <select id="edit-location" class="form-input">
-                        <option value="">(無 None)</option>
                         <option value="A棟25F">A棟25F</option>
                         <option value="D棟17F">D棟17F</option>
+                        <option value="其他">其他</option>
                     </select>
+                </div>
+
+                <div class="form-group" id="edit-other-location-group" style="display:none;">
+                    <label>其他地點 Other Location（最多20字）</label>
+                    <input type="text" id="edit-other-location" class="form-input" maxlength="20" placeholder="請輸入地點">
                 </div>
 
                 <div class="form-group">
@@ -668,7 +673,7 @@
                     <div class="order-card">
                         <div class="order-info">
                             <h4>${order.customerName} <span style="font-weight:normal; font-size:0.8rem; color:#666;">($${order.total})</span>
-                                <br><span style="font-size:0.85rem; font-weight:normal; color:#4b5563;">📍 ${order.location || '無地點'}</span>
+                                <br><span style="font-size:0.85rem; font-weight:normal; color:#4b5563;">📍 ${order.location || '其他'}</span>
                             </h4>
                             <p>${itemStr}</p>
                             <p style="font-size:0.75rem; margin-top:0.2rem;">${new Date(order.timestamp).toLocaleString()}</p>
@@ -688,6 +693,60 @@
         const modalTitle = document.getElementById('modal-title');
         const nameInput = document.getElementById('edit-name');
         const modalTotalPrice = document.getElementById('modal-total-price');
+        const editLocationSelect = document.getElementById('edit-location');
+        const editOtherLocationGroup = document.getElementById('edit-other-location-group');
+        const editOtherLocationInput = document.getElementById('edit-other-location');
+
+        function toggleEditOtherLocationField() {
+            const isOther = editLocationSelect.value === '其他';
+            editOtherLocationGroup.style.display = isOther ? 'block' : 'none';
+            editOtherLocationInput.required = isOther;
+
+            if (!isOther) {
+                editOtherLocationInput.value = '';
+            }
+        }
+
+        function parseLocationForEditor(locationRaw) {
+            const location = (locationRaw || '').trim();
+
+            if (location === 'A棟25F' || location === 'D棟17F') {
+                return { selected: location, otherText: '' };
+            }
+
+            if (!location) {
+                return { selected: '其他', otherText: '' };
+            }
+
+            if (location.startsWith('其他:')) {
+                return { selected: '其他', otherText: location.slice(3).trim() };
+            }
+
+            if (location === '其他') {
+                return { selected: '其他', otherText: '' };
+            }
+
+            return { selected: '其他', otherText: location };
+        }
+
+        function buildNormalizedLocationForSave() {
+            const selected = editLocationSelect.value.trim();
+            if (selected === 'A棟25F' || selected === 'D棟17F') {
+                return selected;
+            }
+
+            const other = editOtherLocationInput.value.trim();
+            if (!other) {
+                return { error: '請輸入其他地點' };
+            }
+            if (other.length > 20) {
+                return { error: '其他地點最多20字' };
+            }
+
+            return `其他: ${other}`;
+        }
+
+        editLocationSelect.addEventListener('change', toggleEditOtherLocationField);
 
         // Open Modal (Index is array index, if undefined -> Add New)
         window.openOrderModal = (idx = null) => {
@@ -702,7 +761,8 @@
                 editingOrderRealIndex = null;
                 modalTitle.innerText = "新增訂單 Add Order";
                 nameInput.value = "";
-                document.getElementById('edit-location').value = "";
+                editLocationSelect.value = "其他";
+                editOtherLocationInput.value = "";
                 // Reset quantities
                 document.querySelectorAll('.modal-qty').forEach(inp => inp.value = 0);
             } else {
@@ -712,7 +772,9 @@
                 editingOrderRealIndex = order.rowIndex;
                 modalTitle.innerText = "編輯訂單 Edit Order";
                 nameInput.value = order.customerName;
-                document.getElementById('edit-location').value = order.location || '';
+                const parsedLocation = parseLocationForEditor(order.location);
+                editLocationSelect.value = parsedLocation.selected;
+                editOtherLocationInput.value = parsedLocation.otherText;
 
                 // Fill quantities
                 order.items.forEach(item => {
@@ -720,6 +782,8 @@
                     if (input) input.value = item.qty;
                 });
             }
+
+            toggleEditOtherLocationField();
 
             // Disable OOS items if current qty is 0
             document.querySelectorAll('.modal-qty').forEach(input => {
@@ -800,8 +864,12 @@
 
         document.getElementById('save-order-btn').addEventListener('click', async () => {
             const customerName = nameInput.value.trim();
-            const location = document.getElementById('edit-location').value.trim();
             if (!customerName) return showToast('請輸入姓名', 'error');
+
+            const normalizedLocation = buildNormalizedLocationForSave();
+            if (typeof normalizedLocation === 'object' && normalizedLocation.error) {
+                return showToast(normalizedLocation.error, 'error');
+            }
 
             const items = [];
             document.querySelectorAll('.modal-qty').forEach(input => {
@@ -830,10 +898,10 @@
                 newData: { // Wrapper for edit, or direct fields for add?
                     // Server for 'Add' expects: customerName, items, total, pickupLocation
                     // Server for 'Update' expects: newData: { customerName, items, total, location }
-                    customerName, items, total, location
+                    customerName, items, total, location: normalizedLocation
                 },
                 // For Add
-                customerName, items, total, pickupLocation: location
+                customerName, items, total, pickupLocation: normalizedLocation
             };
 
             try {

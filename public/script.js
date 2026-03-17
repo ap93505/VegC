@@ -16,6 +16,9 @@ const orderForm = document.getElementById('orderForm');
 const checkoutBtn = document.getElementById('checkoutBtn');
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toastMessage');
+const pickupLocationSelect = document.getElementById('pickupLocation');
+const pickupOtherLocationGroup = document.getElementById('pickupOtherLocationGroup');
+const pickupOtherLocationInput = document.getElementById('pickupOtherLocation');
 
 // Orders Modal Elements
 const ordersToggle = document.getElementById('ordersToggle');
@@ -87,7 +90,24 @@ function setupEventListeners() {
         closedModal.classList.remove('active');
     });
 
+    if (pickupLocationSelect) {
+        pickupLocationSelect.addEventListener('change', togglePickupOtherField);
+        togglePickupOtherField();
+    }
+
     orderForm.addEventListener('submit', handleOrderSubmit);
+}
+
+function togglePickupOtherField() {
+    if (!pickupLocationSelect || !pickupOtherLocationGroup || !pickupOtherLocationInput) return;
+
+    const isOther = pickupLocationSelect.value === '其他';
+    pickupOtherLocationGroup.style.display = isOther ? 'block' : 'none';
+    pickupOtherLocationInput.required = isOther;
+
+    if (!isOther) {
+        pickupOtherLocationInput.value = '';
+    }
 }
 
 // Global orders state
@@ -120,7 +140,7 @@ function renderOrders(orders) {
         return `
             <div style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 0.8rem; border: 1px solid #eee;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-weight: bold;">
-                    <span>${order.customerName} <span style="font-weight:normal; font-size:0.9rem; color:#666;">(${order.location || '無地點'})</span></span>
+                    <span>${order.customerName} <span style="font-weight:normal; font-size:0.9rem; color:#666;">(${order.location || '其他'})</span></span>
                     <span style="color: #666; font-size: 0.9rem;">${date}</span>
                 </div>
                 <div style="color: #4b5563; font-size: 0.95rem; margin-bottom: 0.5rem;">
@@ -152,7 +172,7 @@ window.openUserDetails = (idx) => {
 
     // Update Title
     const titleEl = document.getElementById('userDetailsTitle');
-    if (titleEl) titleEl.innerHTML = `訂單明細 <span style="font-size:0.9rem; font-weight:normal;">(${order.customerName} - ${order.location || '無地點'})</span>`;
+    if (titleEl) titleEl.innerHTML = `訂單明細 <span style="font-size:0.9rem; font-weight:normal;">(${order.customerName} - ${order.location || '其他'})</span>`;
 
     // Logic similar to admin side
     let normalItems = [];
@@ -510,7 +530,23 @@ async function handleOrderSubmit(e) {
 
     const name = document.getElementById('name').value;
     const pickupLocation = document.getElementById('pickupLocation').value;
+    const otherLocation = pickupOtherLocationInput ? pickupOtherLocationInput.value.trim() : '';
     const total = cartTotal.textContent;
+
+    let normalizedPickupLocation = pickupLocation;
+    if (pickupLocation === '其他') {
+        if (!otherLocation) {
+            showToast('請輸入其他取貨地點', 'error');
+            resetButton();
+            return;
+        }
+        if (otherLocation.length > 20) {
+            showToast('其他地點最多20字', 'error');
+            resetButton();
+            return;
+        }
+        normalizedPickupLocation = `其他: ${otherLocation}`;
+    }
 
     // Check Duplicate Name
     try {
@@ -528,7 +564,7 @@ async function handleOrderSubmit(e) {
 
     const orderData = {
         customerName: name,
-        pickupLocation: pickupLocation,
+        pickupLocation: normalizedPickupLocation,
         items: cart.map(item => ({ name: item.name, qty: item.quantity, price: item.price })),
         total: total
     };
@@ -550,6 +586,7 @@ async function handleOrderSubmit(e) {
             updateCartCounts();
             cartModal.classList.remove('active');
             orderForm.reset();
+            togglePickupOtherField();
             showToast('訂單已送出！我們會盡快為您出貨', 'success');
         } else {
             showToast(result.message || '訂購失敗，請稍後再試', 'error');
