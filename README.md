@@ -14,11 +14,18 @@ A premium, full-stack vegetable ordering application built with **Node.js**, **E
     - Mix & match supported.
     - Smart calculation: Bundles the 3 most expensive items into the discount; remaining items are charged at original price.
   - 📋 **Order List**: View today's orders in real-time to avoid duplicate purchases.
-  - 📍 **Location Support**: Customers can select pickup locations (e.g., A棟25F, D棟17F).
+  - 📍 **Location Support**:
+    - Customers can select pickup locations (`A棟25F`, `D棟17F`, `其他`).
+    - If `其他` is selected, an extra required input appears.
+    - The input is trimmed and limited to **20 characters**.
+    - Orders are stored in Google Sheets as `其他: {input}`.
 
 - **Backend (Node.js + Google Sheets)**
   - 🔄 **Google Sheets API**: Uses Google Sheets as a CMS and Database.
   - 🛡️ **Stock Validation**: Double-checks stock on the server before accepting orders.
+  - ✅ **Location Validation**: Server-side validation and normalization for pickup locations.
+    - `none` / empty / legacy values are normalized to `其他`.
+    - Custom locations are normalized to `其他: {input}`.
   - 🖼️ **Image Parsing**: Supports direct URLs, Drive links, and `=IMAGE()` formulas.
   - 📦 **Order Archiving**: Move old orders to a history sheet and clear the current board with one click.
 
@@ -41,14 +48,14 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 #### **2. Orders (Sheet Name: "訂單" or "Orders")**
 | Timestamp | CustomerName | Items | Total | Location |
 |-----------|--------------|-------|-------|----------|
-| (Taipei Time) | (User Input) | `Name*Qty, Name*Qty` | (Auto) | (e.g., A棟25F) |
+| (Taipei Time) | (User Input) | `Name*Qty, Name*Qty` | (Auto) | (e.g., `A棟25F`, `D棟17F`, `其他: 自訂地點`) |
 
 *Note: Order items are now stored as readable text (e.g., `Carrots*2, Spinach*1`) instead of JSON.*
 
 #### **3. Stats (Sheet Name: "統計" or "Statistics")**
-| Name | Stock | SoldQuantity | RemainingStock | BuyersList |
-|------|-------|--------------|----------------|------------|
-| (Auto) | (Auto) | (Auto) | (Auto) | (Auto) |
+| Name | Stock | A棟25F | D棟17F | 其他 | TotalSold | RemainingStock | BuyersList |
+|------|-------|--------|--------|------|-----------|----------------|------------|
+| (Auto) | (Auto) | (Auto) | (Auto) | (Auto) | (Auto) | (Auto) | (Auto) |
 
 #### **4. Announcement (Sheet Name: "公告" or "Announcement")**
 - **Cell A1**: The announcement message text (e.g., "We are closed today!").
@@ -99,7 +106,10 @@ Create a new Google Sheet with the following tabs (names can be English or Chine
 - **Features**:
   - 🏪 **Store Status**: Manually Open/Close the store (overrides auto logic). **Closing the store automatically triggers a Sync Stats update.**
   - 📝 **Order Management**: View, Edit, Add, or Delete orders directly.
-  - 📍 **Location Management**: Edit pickup locations for orders.
+  - 📍 **Location Management**:
+    - Admin can select `A棟25F`, `D棟17F`, or `其他`.
+    - `其他` requires custom location input (trimmed, max 20 chars).
+    - Empty/legacy location values are normalized to `其他`.
   - 📦 **Archive Orders**: One-click archive to history sheet.
   - 📊 **Sync Stats**: Manually trigger an update of the Statistics sheet.
 

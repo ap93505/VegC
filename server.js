@@ -108,6 +108,54 @@ function parseItems(str) {
     }).filter(i => i !== null);
 }
 
+function normalizeLocationForDisplay(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return '其他';
+
+    const lower = value.toLowerCase();
+    if (lower === 'none' || value === '(無 None)' || value === '無') return '其他';
+
+    if (value.startsWith('其他:')) {
+        const detail = value.slice(3).trim();
+        return detail ? `其他: ${detail}` : '其他';
+    }
+
+    return value;
+}
+
+function normalizeLocationForWrite(raw) {
+    const value = String(raw || '').trim();
+
+    if (value === 'A棟25F' || value === 'D棟17F') {
+        return { ok: true, value };
+    }
+
+    if (!value || value.toLowerCase() === 'none' || value === '(無 None)' || value === '無') {
+        return { ok: true, value: '其他' };
+    }
+
+    if (value === '其他') {
+        return { ok: false, message: '請輸入其他地點' };
+    }
+
+    if (value.startsWith('其他:')) {
+        const detail = value.slice(3).trim();
+        if (!detail) {
+            return { ok: false, message: '請輸入其他地點' };
+        }
+        if (detail.length > 20) {
+            return { ok: false, message: '其他地點最多20字' };
+        }
+        return { ok: true, value: `其他: ${detail}` };
+    }
+
+    if (value.length > 20) {
+        return { ok: false, message: '其他地點最多20字' };
+    }
+
+    return { ok: true, value: `其他: ${value}` };
+}
+
 // Helper: Update Statistics Sheet (Sheet 3)
 async function updateStats(doc) {
     try {
@@ -131,19 +179,20 @@ async function updateStats(doc) {
         ]);
 
         // Aggregate Sales Data
-        const productStats = {}; // { Name: { sold: 0, soldA: 0, soldD: 0, buyers: { user: qty } } }
+        const productStats = {}; // { Name: { sold: 0, soldA: 0, soldD: 0, soldOther: 0, buyers: { user: qty } } }
 
         orderRows.forEach((row, rowIndex) => {
             try {
                 const rawItems = row.get('Items');
                 const items = parseItems(rawItems);
 
-                const location = row.get('Location') || '';
+                const location = normalizeLocationForDisplay(row.get('Location'));
                 const customer = row.get('CustomerName') || '';
 
                 // Determine Location
                 const isA = location.includes('A棟25F') || customer.includes('A棟25F');
                 const isD = location.includes('D棟17F') || customer.includes('D棟17F');
+                const isOther = !isA && !isD;
 
                 if (Array.isArray(items)) {
                     items.forEach(item => {
@@ -151,12 +200,13 @@ async function updateStats(doc) {
                             // Normalize Key
                             const key = String(item.name).trim();
                             if (!productStats[key]) {
-                                productStats[key] = { sold: 0, soldA: 0, soldD: 0, buyers: {} };
+                                productStats[key] = { sold: 0, soldA: 0, soldD: 0, soldOther: 0, buyers: {} };
                             }
                             const qty = parseInt(item.qty) || 0;
                             productStats[key].sold += qty;
                             if (isA) productStats[key].soldA += qty;
                             if (isD) productStats[key].soldD += qty;
+                            if (isOther) productStats[key].soldOther += qty;
 
                             if (customer) {
                                 // Clean Customer Name (Remove Location Suffix)
@@ -178,19 +228,20 @@ async function updateStats(doc) {
         // Resize Stats Sheet to match Inventory count (+1 for header +1 for summary)
         const targetRowCount = inventoryRows.length + 2;
 
-        // Resize logic (7 columns now: Name, Stock, Total, A, D, Left, Buyers)
+        // Resize logic (8 columns now: Name, Stock, A, D, Other, Total, Left, Buyers)
         try {
-            await statsSheet.resize({ rowCount: targetRowCount, columnCount: 7 });
+            await statsSheet.resize({ rowCount: targetRowCount, columnCount: 8 });
 
             // Optional: Set Headers if empty (only doing this defensively)
-            await statsSheet.loadCells('A1:G1');
+            await statsSheet.loadCells('A1:H1');
             statsSheet.getCell(0, 0).value = '品項';
             statsSheet.getCell(0, 1).value = '庫存';
             statsSheet.getCell(0, 2).value = 'A棟25F';
             statsSheet.getCell(0, 3).value = 'D棟17F';
-            statsSheet.getCell(0, 4).value = '總售出';
-            statsSheet.getCell(0, 5).value = '剩餘';
-            statsSheet.getCell(0, 6).value = '購買人';
+            statsSheet.getCell(0, 4).value = '其他';
+            statsSheet.getCell(0, 5).value = '總售出';
+            statsSheet.getCell(0, 6).value = '剩餘';
+            statsSheet.getCell(0, 7).value = '購買人';
             await statsSheet.saveUpdatedCells();
         } catch (e) {
             console.warn('Resize/Header update failed:', e.message);
@@ -218,7 +269,7 @@ async function updateStats(doc) {
             const stockStr = invRow.get('Stock');
             const initialStock = parseInt(stockStr) || 0;
 
-            const data = productStats[name] || { sold: 0, soldA: 0, soldD: 0, buyers: {} };
+            const data = productStats[name] || { sold: 0, soldA: 0, soldD: 0, soldOther: 0, buyers: {} };
             const remaining = Math.max(0, initialStock - data.sold);
 
             // Format buyers list
@@ -232,10 +283,11 @@ async function updateStats(doc) {
             // Hide 0s by using || '' (Since 0 is falsy)
             statsSheet.getCell(rowIndex, 2).value = data.soldA || '';
             statsSheet.getCell(rowIndex, 3).value = data.soldD || '';
-            statsSheet.getCell(rowIndex, 4).value = data.sold || '';
+            statsSheet.getCell(rowIndex, 4).value = data.soldOther || '';
+            statsSheet.getCell(rowIndex, 5).value = data.sold || '';
 
-            statsSheet.getCell(rowIndex, 5).value = remaining;
-            statsSheet.getCell(rowIndex, 6).value = buyersList;
+            statsSheet.getCell(rowIndex, 6).value = remaining;
+            statsSheet.getCell(rowIndex, 7).value = buyersList;
         }
 
         // Add Summary Row
@@ -246,9 +298,9 @@ async function updateStats(doc) {
         const totalBags = totalOrders;
 
         if (summaryRowIndex < maxRows) {
-            statsSheet.getCell(summaryRowIndex, 6).value = `共計${totalOrders}筆訂單，需要${totalBags}個袋子`;
+            statsSheet.getCell(summaryRowIndex, 7).value = `共計${totalOrders}筆訂單，需要${totalBags}個袋子`;
             // Clear other cells in this row just in case
-            for (let c = 0; c < 6; c++) statsSheet.getCell(summaryRowIndex, c).value = '';
+            for (let c = 0; c < 7; c++) statsSheet.getCell(summaryRowIndex, c).value = '';
         }
 
         await statsSheet.saveUpdatedCells();
@@ -412,7 +464,7 @@ app.get('/api/orders', async (req, res) => {
                 rowIndex: index, // 0-based index directly matching the array from getRows()
                 timestamp: row.get('Timestamp'),
                 customerName: row.get('CustomerName'),
-                location: row.get('Location') || '',
+                location: normalizeLocationForDisplay(row.get('Location')),
                 items: items,
                 total: row.get('Total')
             };
@@ -541,6 +593,10 @@ app.post('/api/order', async (req, res) => {
         }
 
         const { customerName: nameRaw, pickupLocation, items, total } = req.body;
+        const normalizedLocation = normalizeLocationForWrite(pickupLocation);
+        if (!normalizedLocation.ok) {
+            return res.json({ success: false, message: normalizedLocation.message });
+        }
 
         const doc = await getDoc();
 
@@ -572,7 +628,7 @@ app.post('/api/order', async (req, res) => {
 
         await sheets.orders.addRow({
             Timestamp: getTaipeiTime(),
-            Location: pickupLocation || '',
+            Location: normalizedLocation.value,
             CustomerName: nameRaw,
             Items: stringifyItems(items),
             Total: total
@@ -657,8 +713,6 @@ app.post('/api/admin/archive-orders', async (req, res) => {
 
         await sheets.history.addRows(historyRows);
 
-        await sheets.history.addRows(historyRows);
-
         // 2. Delete all rows from Orders
         for (let i = orderRows.length - 1; i >= 0; i--) {
             await orderRows[i].delete();
@@ -690,6 +744,11 @@ app.post('/api/admin/store-status', async (req, res) => {
 app.post('/api/admin/order/add', async (req, res) => {
     try {
         const { password, customerName, pickupLocation, items, total } = req.body;
+        const normalizedLocation = normalizeLocationForWrite(pickupLocation);
+
+        if (!normalizedLocation.ok) {
+            return res.json({ success: false, message: normalizedLocation.message });
+        }
 
         // Auth
         if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
@@ -719,7 +778,7 @@ app.post('/api/admin/order/add', async (req, res) => {
         await sheets.orders.addRow({
             Timestamp: getTaipeiTime(),
             CustomerName: customerName,
-            Location: pickupLocation || '',
+            Location: normalizedLocation.value,
             Items: stringifyItems(items),
             Total: total
         });
@@ -769,6 +828,11 @@ app.post('/api/admin/order/delete', async (req, res) => {
 app.post('/api/admin/order/update', async (req, res) => {
     try {
         const { password, rowIndex, newData } = req.body;
+        const normalizedLocation = normalizeLocationForWrite(newData?.location);
+
+        if (!normalizedLocation.ok) {
+            return res.json({ success: false, message: normalizedLocation.message });
+        }
         // newData: { customerName, location, items: [{name, qty, price}], total }
 
         if (!process.env.ADMIN_PASSWORD || password !== process.env.ADMIN_PASSWORD) {
@@ -828,7 +892,7 @@ app.post('/api/admin/order/update', async (req, res) => {
         // Apply Updates
         targetRow.assign({
             CustomerName: newData.customerName,
-            Location: newData.location || '', // NEW
+            Location: normalizedLocation.value, // NEW
             Items: stringifyItems(newData.items),
             Total: newData.total,
             // Timestamp remains unchanged usually, or update if desired? Let's keep original timestamp.
